@@ -1,0 +1,17 @@
+{
+    "sqltools.connections": [
+        {
+            "mysqlOptions": {
+                "authProtocol": "default",
+                "enableSsl": "Disabled"
+            },
+            "previewLimit": 50,
+            "server": "172.16.0.123",
+            "port": 3306,
+            "driver": "MariaDB",
+            "database": "mysql",
+            "username": "capescuba",
+            "name": "aipplynow"
+        }
+    ]
+}
