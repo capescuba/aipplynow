@@ -5,7 +5,7 @@ function LinkedInCallback() {
   const location = useLocation();
   const navigate = useNavigate();
   //const [isLoggedIn, setIsLoggedIn] = useState(false);
- 
+
   //alert("LinkedInCallback");
   //alert("LinkedInCallback location.search: " + location.search);
 
@@ -21,9 +21,9 @@ function LinkedInCallback() {
     if (code) {
       console.log("Authorization code: ", code);
       // Exchange code for access token here
-      //localStorage.setItem("isLoggedIn", true); 
+      //localStorage.setItem("isLoggedIn", true);
       //setIsLoggedIn(true);
-      window.opener.postMessage({ type: "auth", code }, "*"); 
+      window.opener.postMessage({ type: "auth", code }, "*");
       window.close();
       //navigate("/");
     }

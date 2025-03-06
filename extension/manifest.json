@@ -1,0 +1,20 @@
+{
+    "manifest_version": 3,
+    "name": "Job Description Copier",
+    "version": "1.0",
+    "description": "Select and copy job description text from websites",
+    "permissions": [
+      "activeTab",
+      "clipboardWrite",
+      "scripting"
+    ],
+    "content_scripts": [
+      {
+        "matches": ["https://*.com/*"],
+        "js": ["content.js"]
+      }
+    ],
+    "action": {
+      "default_popup": "popup.html"
+    }
+  }

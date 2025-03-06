@@ -36,8 +36,10 @@ async function getUserByEmail(email) {
       console.log(`Email Verified: ${user.email_verified}`);
       console.log(`Locale: ${user.country}, ${user.language}`);
       console.log(`Profile Picture URL: ${user.picture}`);
+      return user;
     } else {
       console.log("No user found with this email.");
+      return null;
     }
   } catch (err) {
     console.error("Error fetching user:", err);
@@ -72,4 +74,6 @@ async function insertUser(user) {
 
 module.exports = {
   getTableData,
+  getUserByEmail,
+  insertUser
 };

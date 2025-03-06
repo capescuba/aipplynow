@@ -14,22 +14,47 @@ import "./App.css";
 import LinkedInPage from "./components/linkedin";
 import LinkedInCallback from "./components/linkedInCallback";
 import Home from "./components/home";
+import Session from "./libs/session";
+const SESSION_TIMEOUT = 120000;
 
 function App() {
   const [configData, setConfigData] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isLoggedIn, setIsLoggedIn] = useState(
-    localStorage.getItem("isLoggedIn") === "true"
+    sessionStorage.getItem("isLoggedIn") === "true"
   );
 
-  const handleLogin = () => {
-    localStorage.setItem("isLoggedIn", true);
-    setIsLoggedIn(true);
+  const handleLogin = async () => {
+
+    //alert("handle login getCookie document.cookie = " + document.cookie); 
+    //const token = Session.getCookie("token");
+    //alert("handleLogin  updated- token: " + token);
+    
+    try {
+
+      const response = await fetch("/api/user/login");
+      if (!response.ok) {
+        throw new Error("Network response was not ok");
+      }
+  
+      const data = await response.json();
+  
+      // Set user data in local storage or session state
+      Session.setSessionStorageWithTimeout('isLoggedIn', true, SESSION_TIMEOUT); 
+      Session.setSessionStorageWithTimeout('userInfo', JSON.stringify(data), SESSION_TIMEOUT); 
+      setIsLoggedIn(true);
+  
+      // Additional logic after successful login
+      console.log('User Info:', data);
+    } catch (error) {
+      console.error('Failed to login:', error);
+    }
   };
+  
 
   const handleLogout = () => {
-    localStorage.setItem("isLoggedIn", false);
+    Session.setSessionStorageWithTimeout("isLoggedIn", false, SESSION_TIMEOUT);
     setIsLoggedIn(false);
   };
 
@@ -37,7 +62,7 @@ function App() {
     const handleMessage = (event) => {
       if (event.origin === window.location.origin) {
         if (event.data.type === "auth" && event.data.code) {
-          handleLogin();
+          handleLogin(event.data.code);
         }
       }
     };
@@ -57,6 +82,8 @@ function App() {
         }
         const jsonData = await response.json();
         setConfigData(jsonData);
+        setIsLoggedIn(jsonData.isLoggedIn);
+        Session.setSessionStorageWithTimeout('userInfo', JSON.stringify(jsonData.userInfo), SESSION_TIMEOUT); 
       } catch (err) {
         setError(err.message);
       } finally {

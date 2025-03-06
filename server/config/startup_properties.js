@@ -26,6 +26,7 @@ class StartupProperties {
             console.log(dbProperties);
             this.setProperty('CLIENT_ID', dbProperties[0].LinkedInClientId);
             this.setProperty('CLIENT_SECRET', dbProperties[0].LinkedInClientSecret);
+            this.setProperty('JWT_PASSWORD', dbProperties[0].JwtPassword);
         } catch (err) {
             console.error(err);
         }
