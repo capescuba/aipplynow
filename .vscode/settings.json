@@ -6,12 +6,31 @@
                 "enableSsl": "Disabled"
             },
             "previewLimit": 50,
-            "server": "172.16.0.123",
+            "server": "172.16.0.124",
             "port": 3306,
             "driver": "MariaDB",
             "database": "mysql",
             "username": "capescuba",
             "name": "aipplynow"
+        }
+    ],
+    "dbcode.connections": [
+        {
+            "connectionId": "Z0EwqSXwbx3wgDF_tUC0_",
+            "name": "aipplynow",
+            "driver": "mariadb",
+            "connectionType": "host",
+            "host": "172.16.0.123",
+            "port": 3306,
+            "ssl": false,
+            "username": "capescuba",
+            "password": "",
+            "savePassword": "secretStorage",
+            "database": "aipplynow",
+            "connectionTimeout": 30,
+            "driverOptions": {
+                "retrievePublickey": true
+            }
         }
     ]
 }
