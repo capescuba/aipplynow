@@ -160,7 +160,7 @@ def analyze_with_ai(resume_text, job_desc, local_data, formatting_penalty):
     - "suggestions": [list of strings]
     """
     api_endpoint = "https://api.xai.com/grok"  # Replace with real endpoint
-    api_key = "xai-uLjxrB3g8U1OSGYYLm53UYZOVSPACL9cxngv9NKJG5bRSx064GXwxEcfgYG2mxcxWknInvhCOFuA0gbv"
+    api_key = "xai-uLjxrB3g8U1OSGYYLm53UYZOVSPACL9cxngv9NKJG5bRSx064GXwxEcfgYG2mxcxWknInvhCOFuA0gbvv"
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     payload = {"prompt": prompt, "max_tokens": 500}
 
