@@ -187,7 +187,6 @@ You are an ATS optimization expert. Analyze the resume text and job description 
         "**Locally Extracted Data:**\n" + str(local_data) + "\n\n" +
         "**Formatting Penalty:**\n" + str(formatting_penalty)
     )
-
     try:
         logger.info("Calling xAI API")
         completion = client.chat.completions.create(
