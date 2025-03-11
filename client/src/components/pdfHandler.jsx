@@ -1,31 +1,42 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react'; // Add useEffect
 import { Button, Container, Stack, Typography, CircularProgress, TextareaAutosize, Box, List, ListItem, ListItemText, IconButton, Tooltip } from '@mui/material';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/esm/Page/TextLayer.css';
 import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
 import axios from 'axios';
-import SearchIcon from '@mui/icons-material/Search'; // Magnifying glass icon
+import SearchIcon from '@mui/icons-material/Search';
 
-// Set workerSrc for PDF.js
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 function PDFPreview() {
   const [file, setFile] = useState(null);
   const [numPages, setNumPages] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [uploadStatus, setUploadStatus] = useState(null); // For feedback
-  const [jobDesc, setJobDesc] = useState(''); // State for job description
-  const [scoreData, setScoreData] = useState(null); // State for score breakdown and suggestions
-  const [zoomLevel, setZoomLevel] = useState(1.0); // State for PDF zoom level (1.0 = 100%)
+  const [uploadStatus, setUploadStatus] = useState(null);
+  const [jobDesc, setJobDesc] = useState('');
+  const [url, setUrl] = useState('');
+  const [scoreData, setScoreData] = useState(null);
+  const [zoomLevel, setZoomLevel] = useState(1.0);
+
+  // Listen for URL injection from the extension
+  useEffect(() => {
+    const handleSetJobUrl = (event) => {
+      setUrl(event.detail.url);
+    };
+    window.addEventListener('setJobUrl', handleSetJobUrl);
+    return () => {
+      window.removeEventListener('setJobUrl', handleSetJobUrl);
+    };
+  }, []);
 
   const handleFileChange = (event) => {
     const selectedFile = event.target.files[0];
     if (selectedFile && selectedFile.type === 'application/pdf') {
       setFile(selectedFile);
-      setUploadStatus(null); // Reset status
-      setScoreData(null); // Reset score data
-      setZoomLevel(1.0); // Reset zoom level
-      previewPDF(selectedFile); // Preview immediately
+      setUploadStatus(null);
+      setScoreData(null);
+      setZoomLevel(1.0);
+      previewPDF(selectedFile);
     } else {
       setFile(null);
       setUploadStatus('Please upload a valid PDF file.');
@@ -38,7 +49,7 @@ function PDFPreview() {
 
   const previewPDF = (pdfFile) => {
     setFile(pdfFile);
-    setNumPages(null); // Reset pages for new file
+    setNumPages(null);
   };
 
   const onDocumentLoadSuccess = ({ numPages }) => {
@@ -46,11 +57,11 @@ function PDFPreview() {
   };
 
   const handleZoomIn = () => {
-    setZoomLevel((prev) => Math.min(prev + 0.5, 3.0)); // Cap at 300%
+    setZoomLevel((prev) => Math.min(prev + 0.5, 3.0));
   };
 
   const handleZoomOut = () => {
-    setZoomLevel((prev) => Math.max(prev - 0.5, 0.5)); // Cap at 50%
+    setZoomLevel((prev) => Math.max(prev - 0.5, 0.5));
   };
 
   const handleUpload = async () => {
@@ -58,7 +69,6 @@ function PDFPreview() {
       setUploadStatus('No file selected for upload.');
       return;
     }
-
     if (!jobDesc.trim()) {
       setUploadStatus('Please enter a job description.');
       return;
@@ -66,36 +76,34 @@ function PDFPreview() {
 
     setLoading(true);
     setUploadStatus(null);
-    setScoreData(null); // Reset score data before new upload
+    setScoreData(null);
 
     const formData = new FormData();
     formData.append('resume', file);
-    formData.append('job_desc', jobDesc); // Use the dynamic job description
+    formData.append('job_desc', jobDesc);
 
     try {
-      const response = await axios.post('/resume/parse', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
+      const response = await axios.post('http://localhost:3000/resume/parse', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
       });
       const atsScore = response.data.ats_score;
-      const scoreBreakdown = response.data.score_breakdown;
+      const scoreBreakdown = response.data.breakdown;
       const suggestions = response.data.improvement_suggestions;
+      const resumeData = response.data.data;
 
       setUploadStatus(`Upload successful! ATS Score: ${atsScore}`);
-      setScoreData({ breakdown: scoreBreakdown, suggestions });
+      setScoreData({ breakdown: scoreBreakdown, suggestions, data: resumeData });
       console.log('Server response:', response.data);
     } catch (error) {
-      setUploadStatus(`Upload failed: ${error.response ? error.response.data.error : error.message}`);
-      console.error('Error:', error);
+      console.error('Upload error:', error);
+      setUploadStatus(`Upload failed: ${error.message}`);
     } finally {
       setLoading(false);
     }
   };
 
-  // Calculate dynamic icon size based on PDF width
-  const baseWidth = 300; // Base width of PDF page
-  const iconSize = Math.max(16, Math.min(24, baseWidth * zoomLevel * 0.05)); // Scale icon size with zoom, capped at 16–24px
+  const baseWidth = 300;
+  const iconSize = Math.max(16, Math.min(24, baseWidth * zoomLevel * 0.05));
 
   return (
     <Container maxWidth="lg" sx={{ mt: 8, display: 'flex', justifyContent: 'center', gap: 2 }}>
@@ -125,10 +133,10 @@ function PDFPreview() {
                 <Page
                   key={`page_${index + 1}`}
                   pageNumber={index + 1}
-                  width={300 * zoomLevel} // Adjust width based on zoom level
-                  height={600 * zoomLevel} // Adjust height based on zoom level
-                  renderTextLayer={false} // Disable text layer for simplicity
-                  renderAnnotationLayer={false} // Disable annotation layer for simplicity
+                  width={300 * zoomLevel}
+                  height={600 * zoomLevel}
+                  renderTextLayer={false}
+                  renderAnnotationLayer={false}
                 />
               ))}
             </Document>
@@ -162,8 +170,13 @@ function PDFPreview() {
             Parse and Upload
           </Button>
         </Stack>
+        {url && (
+          <Typography variant="body2" sx={{ width: '100%', textAlign: 'left', color: 'gray', mt: 1 }}>
+            Source URL: <a href={url} target="_blank" rel="noopener noreferrer">{url}</a>
+          </Typography>
+        )}
         <TextareaAutosize
-          minRows={20} // Increased rows to fill the height
+          minRows={20}
           placeholder="Enter job description..."
           value={jobDesc}
           onChange={handleJobDescChange}
@@ -174,15 +187,13 @@ function PDFPreview() {
             {uploadStatus}
           </Typography>
         )}
-        {scoreData && (
+        {scoreData && scoreData.breakdown && (
           <Box sx={{ mt: 2, width: '100%' }}>
             <Typography variant="h6" gutterBottom>Score Breakdown</Typography>
             <List dense>
               {Object.entries(scoreData.breakdown).map(([key, value]) => (
                 <ListItem key={key}>
-                  <ListItemText
-                    primary={`${key.charAt(0).toUpperCase() + key.slice(1)}: ${value.toFixed(1)}%`}
-                  />
+                  <ListItemText primary={`${key.charAt(0).toUpperCase() + key.slice(1)}: ${value.toFixed(1)}%`} />
                 </ListItem>
               ))}
             </List>
@@ -194,6 +205,32 @@ function PDFPreview() {
                 </ListItem>
               ))}
             </List>
+            {scoreData.data && (
+              <>
+                <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>Resume Data</Typography>
+                <List dense>
+                  <ListItem>
+                    <ListItemText primary={`Skills: ${scoreData.data.skills.join(', ')}`} />
+                  </ListItem>
+                  <ListItem>
+                    <ListItemText primary={`Total Experience: ${scoreData.data.total_experience_years} years`} />
+                  </ListItem>
+                  <ListItem>
+                    <ListItemText
+                      primary={`Relevant Experience: ${Object.entries(scoreData.data.relevant_experience)
+                        .map(([role, years]) => `${role}: ${years} years`)
+                        .join(', ')}`}
+                    />
+                  </ListItem>
+                  <ListItem>
+                    <ListItemText primary={`Education: ${scoreData.data.education.length > 0 ? scoreData.data.education.join(', ') : 'None'}`} />
+                  </ListItem>
+                  <ListItem>
+                    <ListItemText primary={`Certifications: ${scoreData.data.certifications.length > 0 ? scoreData.data.certifications.join(', ') : 'None'}`} />
+                  </ListItem>
+                </List>
+              </>
+            )}
           </Box>
         )}
       </Stack>

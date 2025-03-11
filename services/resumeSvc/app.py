@@ -2,23 +2,39 @@ from flask import Flask, request, jsonify
 import PyPDF2
 import spacy
 import re
-import requests
 import os
 import logging
+import json
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+from openai import OpenAI  # Import OpenAI client
+
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
+from flask_cors import CORS
+CORS(app)  # Enable CORS
 
 # Load spaCy model
 nlp = spacy.load("en_core_web_sm")
 
-# Config: Check environment variable USE_AI (default to no-AI if not set)
-USE_AI = os.getenv("USE_AI", "0") == "1"  # "1" enables AI, "0" disables
+# Config: Check environment variable USE_AI
+# USE_AI = os.getenv("USE_AI", "0") == "1"  # Reverted to env var for flexibility
+USE_AI = 1
+# Initialize xAI client
+# XAI_API_KEY = os.getenv("XAI_API_KEY")
+XAI_API_KEY = "xai-uLjxrB3g8U1OSGYYLm53UYZOVSPACL9cxngv9NKJG5bRSx064GXwxEcfgYG2mxcxWknInvhCOFuA0gbv"
+
+if not XAI_API_KEY and USE_AI:
+    logger.error("XAI_API_KEY not set in environment, required for AI mode")
+client = OpenAI(
+    api_key=XAI_API_KEY,
+    base_url="https://api.x.ai/v1",
+)
 
 # Common skills for local extraction
 COMMON_TECH_SKILLS = {
@@ -93,7 +109,7 @@ def extract_skills_and_experience(text, job_skills=None):
     }
 
 def generate_improvement_suggestions_no_ai(resume_data, job_data, formatting_penalty):
-    """Generate suggestions without AI (original logic)."""
+    """Generate suggestions without AI."""
     suggestions = []
     missing_skills = set(job_data["skills"]) - set(resume_data["skills"])
     if missing_skills:
@@ -111,14 +127,13 @@ def generate_improvement_suggestions_no_ai(resume_data, job_data, formatting_pen
     return suggestions if suggestions else ["Your resume is well-aligned."]
 
 def weighted_score_no_ai(resume_text, job_desc_text, pdf_file):
-    """Calculate ATS score without AI (original logic)."""
+    """Calculate ATS score without AI."""
     try:
         job_data = extract_skills_and_experience(job_desc_text)
         resume_data = extract_skills_and_experience(resume_text, job_data["skills"])
 
         skill_match = len(set(resume_data["skills"]) & set(job_data["skills"])) / len(set(job_data["skills"])) if job_data["skills"] else 0
         skill_score = skill_match * 50
-
         exp_score = min(resume_data["total_experience_years"] / 10, 1) * 30
         edu_cert_score = min((5 if resume_data["education"] else 0) + (5 if resume_data["certifications"] else 0), 10)
         formatting_penalty = check_formatting(pdf_file)
@@ -130,46 +145,93 @@ def weighted_score_no_ai(resume_text, job_desc_text, pdf_file):
         return {
             "data": resume_data,
             "ats_score": f"{final_score:.2f}%",
-            "breakdown": {"skills": skill_score, "experience": exp_score, "education_certifications": edu_cert_score, "formatting": format_score},
-            "suggestions": suggestions
+            "breakdown": {
+                "skills": skill_score,
+                "experience": exp_score,
+                "education_certifications": edu_cert_score,
+                "formatting": format_score
+            },
+            "improvement_suggestions": suggestions
         }
     except Exception as e:
         logger.error(f"No-AI scoring failed: {str(e)}")
         raise ValueError(f"Scoring error: {str(e)}")
 
 def analyze_with_ai(resume_text, job_desc, local_data, formatting_penalty):
-    """Use AI to refine data, score, and suggest improvements."""
-    prompt = f"""
-    You are an ATS optimization expert. Refine the resume data, score ATS compatibility (0-100%), and provide 3-5 specific suggestions.
+    """Use xAI to refine data, score, and suggest improvements."""
+    base_prompt = """
+You are an ATS optimization expert. Analyze the resume text and job description below, refine the resume data, score ATS compatibility (0-100%), and provide 3-5 specific suggestions. Return *only* a JSON object with the following structure, with no additional text, comments, or markdown outside the JSON:
 
-    **Resume Text:**
-    {resume_text}
-
-    **Job Description:**
-    {job_desc}
-
-    **Locally Extracted Data:**
-    {local_data}
-
-    **Formatting Penalty:**
-    {formatting_penalty}
-
-    Return JSON:
-    - "data": {{"skills": [list], "total_experience_years": number, "relevant_experience": {{"role": years}}, "education": [list], "certifications": [list]}}
-    - "ats_score": string (e.g., "75.50%")
-    - "suggestions": [list of strings]
-    """
-    api_endpoint = "https://api.xai.com/grok"  # Replace with real endpoint
-    api_key = "xai-uLjxrB3g8U1OSGYYLm53UYZOVSPACL9cxngv9NKJG5bRSx064GXwxEcfgYG2mxcxWknInvhCOFuA0gbv"
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    payload = {"prompt": prompt, "max_tokens": 500}
+{
+  "data": {
+    "skills": [list of strings],
+    "total_experience_years": number,
+    "relevant_experience": {"role": years},
+    "education": [list of strings],
+    "certifications": [list of strings]
+  },
+  "ats_score": "XX.XX%",
+  "breakdown": {
+    "skills": number,
+    "experience": number,
+    "education_certifications": number,
+    "formatting": number
+  },
+  "improvement_suggestions": [list of strings]
+}
+"""
+    prompt = (
+        base_prompt +
+        "**Resume Text:**\n" + resume_text + "\n\n" +
+        "**Job Description:**\n" + job_desc + "\n\n" +
+        "**Locally Extracted Data:**\n" + str(local_data) + "\n\n" +
+        "**Formatting Penalty:**\n" + str(formatting_penalty)
+    )
 
     try:
-        response = requests.post(api_endpoint, json=payload, headers=headers)
-        if response.status_code == 200:
-            return eval(response.json().get("text", ""))
-        else:
-            raise Exception(f"API call failed: {response.status_code}")
+        logger.info("Calling xAI API")
+        completion = client.chat.completions.create(
+            model="grok-2-latest",
+            messages=[
+                {"role": "system", "content": "You are an ATS optimization expert."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=2000
+        )
+        response_text = completion.choices[0].message.content
+        logger.info(f"xAI response: {response_text}")
+
+        # Debug: Log the raw response
+        logger.debug(f"Raw response to parse: {repr(response_text)} (length: {len(response_text.strip())})")
+
+        # Strip Markdown code block syntax
+        cleaned_response = response_text.strip()
+        if cleaned_response.startswith("```json") and cleaned_response.endswith("```"):
+            cleaned_response = cleaned_response[7:-3].strip()  # Remove ```json and ```
+        elif cleaned_response.startswith("```") and cleaned_response.endswith("```"):
+            cleaned_response = cleaned_response[3:-3].strip()  # Remove generic ```
+        
+        # Check if the cleaned response is empty
+        if not cleaned_response:
+            logger.error("xAI returned an empty response after cleaning")
+            return None
+
+        # Debug: Log the cleaned response
+        logger.debug(f"Cleaned response to parse: {repr(cleaned_response)} (length: {len(cleaned_response)})")
+
+        # Parse the cleaned response as JSON
+        ai_result = json.loads(cleaned_response)
+        
+        # Ensure required fields are present with defaults
+        ai_result.setdefault("breakdown", {
+            "skills": 0, "experience": 0, "education_certifications": 0, "formatting": 0
+        })
+        ai_result.setdefault("improvement_suggestions", ai_result.pop("suggestions", []))
+        return ai_result
+
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse JSON from xAI response: {str(e)}. Raw response: {repr(response_text)}. Cleaned response: {repr(cleaned_response)}")
+        return None
     except Exception as e:
         logger.error(f"AI analysis failed: {str(e)}")
         return None
@@ -178,9 +240,9 @@ def analyze_no_ai(resume_text, job_desc, pdf_file):
     """Wrapper for no-AI analysis."""
     return weighted_score_no_ai(resume_text, job_desc, pdf_file)
 
-@app.route("/parse", methods=["POST"])
+@app.route("/resume/parse", methods=["POST"])
 def parse_and_rank():
-    """Parse resume and rank it, toggling between AI and no-AI modes."""
+    """Parse resume and rank it with a consistent response structure."""
     if "resume" not in request.files or "job_desc" not in request.form:
         return jsonify({"error": "Missing resume PDF or job description"}), 400
 
@@ -196,14 +258,19 @@ def parse_and_rank():
             logger.info("Running in AI mode")
             formatting_penalty = check_formatting(resume_file)
             local_data = extract_skills_and_experience(resume_text)
-            ai_result = analyze_with_ai(resume_text, job_desc, local_data, formatting_penalty)
-            if ai_result and "data" in ai_result:
-                return jsonify(ai_result), 200
-            logger.warning("AI failed, falling back to no-AI mode")
+            result = analyze_with_ai(resume_text, job_desc, local_data, formatting_penalty)
+            if result and "data" in result:
+                result.setdefault("breakdown", {
+                    "skills": 0, "experience": 0, "education_certifications": 0, "formatting": 0
+                })
+                result.setdefault("improvement_suggestions", result.pop("suggestions", []))
+            else:
+                logger.warning("AI failed, falling back to no-AI mode")
+                result = analyze_no_ai(resume_text, job_desc, resume_file)
+        else:
+            logger.info("Running in no-AI mode")
+            result = analyze_no_ai(resume_text, job_desc, resume_file)
 
-        # No-AI mode (or fallback)
-        logger.info("Running in no-AI mode")
-        result = analyze_no_ai(resume_text, job_desc, resume_file)
         return jsonify(result), 200
 
     except ValueError as ve:

@@ -121,21 +121,95 @@ async function defineRoutes() {
     }
   });
 
-  // Protected route (JWT check)
-  app.post("/resume/parse", decodeJWT, upload.single('resume'), async function (req, res) {
-    data = await Resumehandler.parseResume(req.file.buffer, req.body.job_desc );
+// Protected route (JWT check)
+app.post("/resume/parse", decodeJWT, upload.single('resume'), async function (req, res) {
+  try {
+    // Parse the resume and get the analysis data
+    const data = await Resumehandler.parseResume(req.file.buffer, req.body.job_desc);
     
-    res.send(data);
+    // Store the analysis in the database with the user's email
+    const userEmail = req.user.email; // From JWT middleware
+    const analysisId = await DB.insertResumeAnalysis(data, userEmail);
+    
+    // Add the analysis ID to the response (optional)
+    const responseData = {
+      ...data,
+      analysis_id: analysisId.toString()
+    };
+    
+    // Send the response back to the client
+    res.send(responseData);
+    
+  } catch (error) {
+    console.error('Error in resume parsing or storage:', error);
+    res.status(500).send({
+      error: 'Failed to process resume',
+      message: error.message
+    });
+  }
+});
 
-    
-        
-    //res.send(
-    //  `Hello ${req.user.email}, you have access to this protected route!`
-    //);
-  });
+app.get("/callback", async function (req, res) {
+  const { code, state } = req.query;
+  if (state !== STATE) {
+    return res.status(400).send("State mismatch error.");
+  }
+
+  try {
+    const accessToken = await linkedinApi.getAccessToken(code);
+    const userInfo = await linkedinApi.getUserInfo(accessToken);
+    console.log(`User info: ${JSON.stringify(userInfo)}`);
+
+    const token = jwt.sign(
+      { email: userInfo.email },
+      CONFIG.properties.JWT_PASSWORD,
+      { expiresIn: "1h" }
+    );
+
+    const user = User.fromJSON(userInfo);
+    if ((await DB.getUserByEmail(user.email)) == null) {
+      await DB.insertUser(user);
+    }
+
+    req.session.userInfo = userInfo;
+    req.session.isLoggedIn = true;
+    req.session.save((err) => {
+      if (err) {
+        console.error("Failed to save session:", err);
+        return res.status(500).send("Error saving session.");
+      }
+      res.cookie("token", token, { maxAge: 900000, httpOnly: true });
+
+      // Use req.protocol and req.headers.host to construct the origin
+      const origin = `${req.protocol}://${req.headers.host}`;
+      res.send(`
+        <html>
+          <body>
+            <script>
+              window.opener.postMessage({
+                type: "auth",
+                code: "${code}",
+                userInfo: ${JSON.stringify(userInfo)},
+                isLoggedIn: true
+              }, "${origin}");
+              setTimeout(() => window.close(), 100);
+            </script>
+          </body>
+        </html>
+      `);
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).send("Error fetching user information.");
+  }
+});
+
+
+
+
 
   // Callback route
-  app.get("/callback", async function (req, res) {
+  app.get("/callbackOLD", async function (req, res) {
     const { code, state } = req.query;
     if (state !== STATE) {
       return res.status(400).send("State mismatch error.");
@@ -177,6 +251,17 @@ async function defineRoutes() {
   // Route to handle POST request
   app.get("/api/user/login", decodeJWT, function (req, res) {
     res.json(req.session.userInfo);
+  });
+
+  app.get("/api/logout", (req, res) => {
+    req.session.destroy((err) => {
+      if (err) {
+        console.error("Failed to destroy session:", err);
+        return res.status(500).send("Logout failed");
+      }
+      res.clearCookie("token"); // Clear the token cookie
+      res.send({ success: true });
+    });
   });
 
   // Catch-all route to serve React app

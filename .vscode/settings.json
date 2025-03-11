@@ -31,6 +31,24 @@
             "driverOptions": {
                 "retrievePublickey": true
             }
+        },
+        {
+            "connectionId": "oK0R--F8DP1qUUoYzSd_U",
+            "name": "AIpply-Dev",
+            "driver": "mysql",
+            "color": "#FFC54F",
+            "connectionType": "host",
+            "host": "aipply-dev.cqpuuixlpf5e.us-west-1.rds.amazonaws.com",
+            "port": 3306,
+            "ssl": true,
+            "sslTrustCertificate": false,
+            "username": "aipply",
+            "password": "",
+            "savePassword": "secretStorage",
+            "connectionTimeout": 500,
+            "driverOptions": {
+                "retrievePublickey": true
+            }
         }
     ]
 }
