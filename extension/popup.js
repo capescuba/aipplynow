@@ -1,43 +1,67 @@
-document.getElementById('selectButton').addEventListener('click', () => {
-    chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
-        if (!tabs[0]) {
-            console.error('No active tab found');
-            alert('No active tab detected. Please try again.');
-            return;
-        }
-
-        const tabId = tabs[0].id;
-        console.log('Sending message to tab:', tabId);
-
-        chrome.tabs.sendMessage(tabId, {action: "toggleSelectionMode"}, (response) => {
-            if (chrome.runtime.lastError) {
-                console.error('Error sending message:', chrome.runtime.lastError.message);
-                // If content script isn’t loaded, try injecting it dynamically
-                chrome.scripting.executeScript({
-                    target: {tabId: tabId},
-                    files: ['content.js']
-                }, () => {
-                    if (chrome.runtime.lastError) {
-                        console.error('Script injection failed:', chrome.runtime.lastError.message);
-                        alert('Failed to initialize extension. Please refresh the page and try again.');
-                    } else {
-                        // Retry sending the message after injection
-                        chrome.tabs.sendMessage(tabId, {action: "toggleSelectionMode"}, (retryResponse) => {
-                            if (retryResponse && retryResponse.status === "selectionModeOn") {
-                                window.close();
-                            } else {
-                                alert('Extension loaded, but activation failed. Try again.');
-                            }
-                        });
-                    }
+// popup.js
+document.getElementById('toggleButton').addEventListener('click', () => {
+  chrome.permissions.request({
+    origins: ["http://localhost:3000/*"]
+  }, (granted) => {
+    if (granted) {
+      console.log('Permissions granted by user');
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        const selectionTabId = tabs[0].id;
+        chrome.tabs.sendMessage(selectionTabId, { action: "toggleSelectionMode" }, (response) => {
+          if (chrome.runtime.lastError) {
+            console.error('Popup error:', chrome.runtime.lastError.message);
+          } else if (response && response.status === "selectionModeOn") {
+            console.log('Selection mode activated');
+            // Wait for selection response
+            chrome.runtime.onMessage.addListener(function handler(request, sender, sendResponse) {
+              if (request.action === "jobDescriptionSelected" && sender.tab.id === selectionTabId) {
+                console.log('Job description received:', request.text, 'URL:', request.url);
+                chrome.runtime.removeListener(handler); // Clean up listener
+                chrome.tabs.query({ url: "http://localhost:3000/*" }, (reactTabs) => {
+                  if (reactTabs.length > 0) {
+                    const reactTabId = reactTabs[0].id;
+                    chrome.scripting.executeScript({
+                      target: { tabId: reactTabId },
+                      func: injectTextIntoTextarea,
+                      args: [request.text, request.url]
+                    }, (results) => {
+                      if (chrome.runtime.lastError) {
+                        console.error('Injection error:', chrome.runtime.lastError.message);
+                      } else {
+                        console.log('Injection successful:', results);
+                        chrome.tabs.update(reactTabId, { active: true });
+                      }
+                    });
+                  } else {
+                    console.error('No React tab found.');
+                  }
                 });
-            } else if (response && response.status === "selectionModeOn") {
-                console.log('Selection mode activated');
-                window.close(); // Close popup only on success
-            } else {
-                console.log('No valid response from content script');
-                alert('Could not activate selection mode. Please refresh the page.');
-            }
+              }
+            });
+          }
         });
-    });
+      });
+    } else {
+      console.error('Permissions denied by user');
+      alert('Permission to access localhost:3000 is required to proceed.');
+    }
+  });
 });
+
+function injectTextIntoTextarea(text, url) {
+  const tryInject = (attempts = 5, delay = 500) => {
+    const textarea = document.querySelector('textarea');
+    if (textarea) {
+      textarea.value = text;
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+      window.dispatchEvent(new CustomEvent('setJobUrl', { detail: { url } }));
+      console.log('Text injected:', text, 'URL:', url);
+    } else if (attempts > 0) {
+      console.log('Textarea not found, retrying...', attempts);
+      setTimeout(() => tryInject(attempts - 1, delay), delay);
+    } else {
+      console.error('No textarea found after retries.');
+    }
+  };
+  tryInject();
+}

@@ -4,7 +4,7 @@ const fs = require('fs');
 const { parse } = require('path');
 
 // Flask server URL (replace with your actual URL if different)
-const FLASK_URL = 'http://localhost:5000/parse';
+const FLASK_URL = 'http://localhost:5000/resume/parse';
 
 // Path to your resume PDF file
 //const RESUME_PATH = './resume.pdf';

@@ -72,8 +72,58 @@ async function insertUser(user) {
   }
 }
 
+// Updated function without table creation
+async function insertResumeAnalysis(analysisData, userEmail = null) {
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    
+    const query = `
+      INSERT INTO resume_analysis (
+        user_email,
+        ats_score,
+        skills,
+        total_experience_years,
+        relevant_experience,
+        education,
+        certifications,
+        breakdown_skills,
+        breakdown_experience,
+        breakdown_edu_certs,
+        breakdown_formatting,
+        suggestions
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+
+    const values = [
+      userEmail,
+      analysisData.ats_score,
+      JSON.stringify(analysisData.data.skills),
+      analysisData.data.total_experience_years,
+      JSON.stringify(analysisData.data.relevant_experience),
+      JSON.stringify(analysisData.data.education),
+      JSON.stringify(analysisData.data.certifications),
+      analysisData.breakdown.skills,
+      analysisData.breakdown.experience,
+      analysisData.breakdown.education_certifications,
+      analysisData.breakdown.formatting,
+      JSON.stringify(analysisData.improvement_suggestions)
+    ];
+
+    const result = await conn.query(query, values);
+    console.log("Resume analysis stored successfully with ID:", result.insertId);
+    return result.insertId;
+  } catch (err) {
+    console.error("Error storing resume analysis:", err);
+    throw err;
+  } finally {
+    if (conn) conn.end();
+  }
+}
+
 module.exports = {
   getTableData,
   getUserByEmail,
-  insertUser
+  insertUser,
+  insertResumeAnalysis
 };

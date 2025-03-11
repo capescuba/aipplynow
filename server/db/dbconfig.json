@@ -1,7 +1,7 @@
 {
-    "host": "172.16.0.123",
-    "user": "capescuba",
-    "password": "Violator123!",
+    "host": "aipply-dev.cqpuuixlpf5e.us-west-1.rds.amazonaws.com",
+    "user": "aipply",
+    "password": "Aipply123!",
     "database": "aipplynow"
   }
   
