@@ -27,7 +27,7 @@ nlp = spacy.load("en_core_web_sm")
 USE_AI = 1
 # Initialize xAI client
 # XAI_API_KEY = os.getenv("XAI_API_KEY")
-XAI_API_KEY = "xai-uLjxrB3g8U1OSGYYLm53UYZOVSPACL9cxngv9NKJG5bRSx064GXwxEcfgYG2mxcxWknInvhCOFuA0gbv"
+XAI_API_KEY = "xai-uLjxrB3g8U1OSGYYLm53UYZOVSPACL9cxngv9NKJG5bRSx064GXwxEcfgYG2mxcxWknInvhCOFuA0gbv1"
 
 if not XAI_API_KEY and USE_AI:
     logger.error("XAI_API_KEY not set in environment, required for AI mode")
