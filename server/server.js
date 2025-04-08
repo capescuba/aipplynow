@@ -11,20 +11,20 @@ const PORT = process.env.PORT || 3000;
 const User = require("./data objects/user.js");
 const DB = require("./db/db.js");
 const Resumehandler = require("./resume-handler.js");
+const resumeModule = require("./api/resume-manager.js");
 const staticPath = path.resolve(__dirname, '..', 'client', 'build');
 const clientHome = path.resolve(__dirname, '..', 'client', 'build', 'index.html');
 const multer = require('multer');
 
 const upload = multer({
-  storage: multer.memoryStorage(), // Stores file in memory as a Buffer
+  storage: multer.memoryStorage(),
   limits: { fileSize: 1024 * 1024 * 10 } // Limit to 10MB
 });
 
 // Middleware to verify and decode JWT
 function decodeJWT(req, res, next) {
   const internalCall = next == null;
-
-  const token = req.cookies.token; // Get token from cookies
+  const token = req.cookies.token;
 
   if (!token) {
     if (internalCall) {
@@ -36,7 +36,7 @@ function decodeJWT(req, res, next) {
 
   try {
     const decoded = jwt.verify(token, CONFIG.properties.JWT_PASSWORD);
-    req.user = decoded; // Attach decoded payload to the request object
+    req.user = decoded; // Attach decoded payload (email) to request
     if (internalCall) {
       return true;
     } else {
@@ -53,10 +53,8 @@ function decodeJWT(req, res, next) {
 
 // Initialize server and middleware
 function startServer() {
-  // Serve the React app
   app.use(express.static(staticPath));
 
-  // Configure session middleware
   app.use(
     session({
       secret: "yourSecretKey",
@@ -67,180 +65,77 @@ function startServer() {
   );
 
   app.use(cookieParser());
+  app.use(express.json()); // Add this to parse JSON bodies
 
-  // Define routes
   defineRoutes();
 
-  // Start the server
   app.listen(PORT, function () {
     console.log(`Server is running on port ${PORT}`);
   });
 }
 
-// Define application routes
 async function defineRoutes() {
-  // Public route (No JWT check)
-  app.get("/", function (req, res) {
-    //res.sendFile(path.join(__dirname + "client\build\index.html"));
-    res.sendFile(clientHome);
-  });
+  // Static routes
+  app.get("/", (req, res) => res.sendFile(clientHome));
+  app.get("/login", (req, res) => res.sendFile(clientHome));
 
-  // Login route (No JWT check)
-  app.get("/login", function (req, res) {
-    //res.sendFile(path.join(__dirname + "../client/build/index.html"));
-    res.sendFile(clientHome);
-  });
-
-  // API Config route (No JWT check)
-  app.get("/api/config", function (req, res) {
+  // API routes
+  app.get("/api/config", async (req, res) => {
     const isLoggedIn = decodeJWT(req, res, null);
     if (isLoggedIn) {
-      DB.getUserByEmail(req.user.email)
-        .then((user) => {
-          if (user) {
-            req.session.userInfo = user;
-          } else {
-            isLoggedIn = false;
-            req.session.userInfo = null;
-          }
-        })
-        .finally(() => {
-          res.send({
-            clientId: CONFIG.properties.CLIENT_ID,
-            redirectUri: linkedinApi.REDIRECT_URI,
-            isLoggedIn: isLoggedIn,
-            userInfo: req.session.userInfo
-          });
+      try {
+        const user = await DB.getUserByEmail(req.user.email);
+        req.session.userInfo = user || null;
+        res.send({
+          clientId: CONFIG.properties.CLIENT_ID,
+          redirectUri: linkedinApi.REDIRECT_URI,
+          isLoggedIn: !!user,
+          userInfo: req.session.userInfo,
         });
+      } catch (error) {
+        res.status(500).send("Error fetching user");
+      }
     } else {
       res.send({
         clientId: CONFIG.properties.CLIENT_ID,
         redirectUri: linkedinApi.REDIRECT_URI,
-        isLoggedIn: isLoggedIn,
+        isLoggedIn: false,
       });
     }
   });
 
-// Protected route (JWT check)
-app.post("/resume/parse", decodeJWT, upload.single('resume'), async function (req, res) {
-  try {
-    // Parse the resume and get the analysis data
-    const data = await Resumehandler.parseResume(req.file.buffer, req.body.job_desc);
-    
-    // Store the analysis in the database with the user's email
-    const userEmail = req.user.email; // From JWT middleware
-    const analysisId = await DB.insertResumeAnalysis(data, userEmail);
-    
-    // Add the analysis ID to the response (optional)
-    const responseData = {
-      ...data,
-      analysis_id: analysisId.toString()
-    };
-    
-    // Send the response back to the client
-    res.send(responseData);
-    
-  } catch (error) {
-    console.error('Error in resume parsing or storage:', error);
-    res.status(500).send({
-      error: 'Failed to process resume',
-      message: error.message
-    });
-  }
-});
-
-app.get("/callback", async function (req, res) {
-  const { code, state } = req.query;
-  if (state !== STATE) {
-    return res.status(400).send("State mismatch error.");
-  }
-
-  try {
-    const accessToken = await linkedinApi.getAccessToken(code);
-    const userInfo = await linkedinApi.getUserInfo(accessToken);
-    console.log(`User info: ${JSON.stringify(userInfo)}`);
-
-    const token = jwt.sign(
-      { email: userInfo.email },
-      CONFIG.properties.JWT_PASSWORD,
-      { expiresIn: "1h" }
-    );
-
-    const user = User.fromJSON(userInfo);
-    if ((await DB.getUserByEmail(user.email)) == null) {
-      await DB.insertUser(user);
-    }
-
-    req.session.userInfo = userInfo;
-    req.session.isLoggedIn = true;
-    req.session.save((err) => {
-      if (err) {
-        console.error("Failed to save session:", err);
-        return res.status(500).send("Error saving session.");
-      }
-      res.cookie("token", token, { maxAge: 900000, httpOnly: true });
-
-      // Use req.protocol and req.headers.host to construct the origin
-      const origin = `${req.protocol}://${req.headers.host}`;
-      res.send(`
-        <html>
-          <body>
-            <script>
-              window.opener.postMessage({
-                type: "auth",
-                code: "${code}",
-                userInfo: ${JSON.stringify(userInfo)},
-                isLoggedIn: true
-              }, "${origin}");
-              setTimeout(() => window.close(), 100);
-            </script>
-          </body>
-        </html>
-      `);
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).send("Error fetching user information.");
-  }
-});
-
-
-
-
-
-  // Callback route
-  app.get("/callbackOLD", async function (req, res) {
+  app.get("/api/auth/callback", async (req, res) => {
     const { code, state } = req.query;
-    if (state !== STATE) {
-      return res.status(400).send("State mismatch error.");
-    }
-
+    if (state !== STATE) return res.status(400).send("State mismatch error.");
     try {
       const accessToken = await linkedinApi.getAccessToken(code);
       const userInfo = await linkedinApi.getUserInfo(accessToken);
-      console.log(`User info: ${JSON.stringify(userInfo)}`);
-
-      const token = jwt.sign(
-        { email: userInfo.email },
-        CONFIG.properties.JWT_PASSWORD,
-        { expiresIn: "1h" }
-      );
-
+      const token = jwt.sign({ email: userInfo.email }, CONFIG.properties.JWT_PASSWORD, { expiresIn: "1h" });
       const user = User.fromJSON(userInfo);
-      if ((await DB.getUserByEmail(user.email)) == null) {
-        await DB.insertUser(user);
+      
+      let existingUser = await DB.getUserByEmail(user.email);
+      let userId;
+      if (!existingUser) {
+        userId = await DB.insertUser(user);
+        await DB.addUserEmail(userId, user.email); // Add email to user_emails
+      } else {
+        userId = existingUser.user_id;
       }
-
+      
       req.session.userInfo = userInfo;
       req.session.isLoggedIn = true;
       req.session.save((err) => {
-        if (err) {
-          console.error("Failed to save session:", err);
-          return res.status(500).send("Error saving session.");
-        }
-        console.log("Session saved:", req.session);
+        if (err) return res.status(500).send("Error saving session.");
         res.cookie("token", token, { maxAge: 900000, httpOnly: true });
-        res.sendFile(clientHome);
+        const origin = `${req.protocol}://${req.headers.host}`;
+        res.send(`
+          <html><body>
+            <script>
+              window.opener.postMessage({ type: "auth", code: "${code}", userInfo: ${JSON.stringify(userInfo)}, isLoggedIn: true }, "${origin}");
+              setTimeout(() => window.close(), 100);
+            </script>
+          </body></html>
+        `);
       });
     } catch (error) {
       console.error(error);
@@ -248,26 +143,105 @@ app.get("/callback", async function (req, res) {
     }
   });
 
-  // Route to handle POST request
-  app.get("/api/user/login", decodeJWT, function (req, res) {
-    res.json(req.session.userInfo);
+  app.post("/api/users/me/resumes/:resume_id/parse", decodeJWT, async (req, res) => {
+    try {
+      const resumeId = req.params.resume_id;
+      const userId = await DB.getUserIdByEmail(req.user.email);
+      if (!userId) throw new Error("User not found");
+
+      const resumeFile = await resumeModule.getResumeFile(resumeId, userId);
+      if (!resumeFile) throw new Error("Resume not found");
+
+      const data = await Resumehandler.parseResume(resumeFile.buffer, req.body.job_desc);
+      await DB.insertResumeAnalysis(data, userId);
+
+      res.send({ resume_id: resumeId, data });
+    } catch (error) {
+      console.error("Error in resume parsing:", error);
+      res.status(500).send({ error: "Failed to parse resume", message: error.message });
+    }
   });
 
-  app.get("/api/logout", (req, res) => {
+  app.get("/api/users/me/resumes", decodeJWT, async (req, res) => {
+    try {
+      const resumes = await DB.getResumesByEmail(req.user.email);
+      res.send(resumes);
+    } catch (error) {
+      console.error("Error fetching resumes:", error);
+      res.status(500).send({ error: "Failed to fetch resumes", message: error.message });
+    }
+  });
+
+  app.post("/api/users/me/resumes", decodeJWT, upload.single("resume"), async (req, res) => {
+    try {
+      const originalFileName = req.file.originalname;
+      const userId = await DB.getUserIdByEmail(req.user.email);
+      if (!userId) throw new Error("User not found");
+
+      const resumeId = await resumeModule.uploadResume(
+        req.file.buffer,
+        userId,
+        originalFileName
+      );
+
+      res.send({ resume_id: resumeId.toString() });
+    } catch (error) {
+      console.error("Error saving resume to S3:", error);
+      res.status(500).send({ error: "Failed to save resume", message: error.message });
+    }
+  });
+
+  app.get("/api/users/me/resumes/:resume_id/download", decodeJWT, async (req, res) => {
+    try {
+      const userId = await DB.getUserIdByEmail(req.user.email);
+      if (!userId) throw new Error("User not found");
+      
+      const resumeFile = await resumeModule.getResumeFile(req.params.resume_id, userId);
+      if (!resumeFile) return res.status(404).send({ error: "Resume not found" });
+      
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="${resumeFile.originalName}"`);
+      res.send(resumeFile.buffer);
+    } catch (error) {
+      console.error("Error downloading resume:", error);
+      res.status(500).send({ error: "Failed to download resume", message: error.message });
+    }
+  });
+
+  app.delete("/api/users/me/resumes/:resume_id", decodeJWT, async (req, res) => {
+    try {
+      const userId = await DB.getUserIdByEmail(req.user.email);
+      if (!userId) throw new Error("User not found");
+      
+      await resumeModule.deleteResume(req.params.resume_id, userId);
+      res.send({ success: true });
+    } catch (error) {
+      console.error("Error deleting resume:", error);
+      res.status(500).send({ error: "Failed to delete resume", message: error.message });
+    }
+  });
+
+  app.get("/api/users/me", decodeJWT, async (req, res) => {
+    try {
+      const user = await DB.getUserByEmail(req.user.email);
+      if (!user) return res.status(404).send("User not found");
+      res.json(user);
+    } catch (error) {
+      console.error("Error fetching user info:", error);
+      res.status(500).send("Error fetching user info");
+    }
+  });
+
+  app.post("/api/auth/logout", (req, res) => {
     req.session.destroy((err) => {
-      if (err) {
-        console.error("Failed to destroy session:", err);
-        return res.status(500).send("Logout failed");
-      }
-      res.clearCookie("token"); // Clear the token cookie
+      if (err) return res.status(500).send("Logout failed");
+      res.clearCookie("token");
       res.send({ success: true });
     });
   });
 
-  // Catch-all route to serve React app
-  app.get("*", function (req, res) {
-    res.sendFile(clientHome);
-  });
+  // Catch-all for React app
+  app.get("*", (req, res) => res.sendFile(clientHome));
 }
 
 // Initialize configuration and start server

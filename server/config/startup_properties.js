@@ -22,11 +22,12 @@ class StartupProperties {
     async init() {
         // Fetch data from the database
         try {
-            dbProperties = await dbModule.getTableData('config');
+            dbProperties = await dbModule.getConfig();
             console.log(dbProperties);
-            this.setProperty('CLIENT_ID', dbProperties[0].LinkedInClientId);
-            this.setProperty('CLIENT_SECRET', dbProperties[0].LinkedInClientSecret);
-            this.setProperty('JWT_PASSWORD', dbProperties[0].JwtPassword);
+            this.setProperty('CLIENT_ID', dbProperties.LinkedInClientId);
+            this.setProperty('CLIENT_SECRET', dbProperties.LinkedInClientSecret);
+            this.setProperty('JWT_PASSWORD', dbProperties.JwtPassword);
+            this.setProperty('XAI_API_KEY', dbProperties.XaiApiKey);
         } catch (err) {
             console.error(err);
         }

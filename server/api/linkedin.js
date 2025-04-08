@@ -1,7 +1,7 @@
 // linkedinApi.js
 const CONFIG = require('../config/startup_properties');
 const axios = require('axios');
-const REDIRECT_URI = 'http://localhost:3000/callback';
+const REDIRECT_URI = 'http://localhost:3000/api/auth/callback';
 //const REDIRECT_URI = 'http://localhost:3000/';
 
 async function getAccessToken(code) {

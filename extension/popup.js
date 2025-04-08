@@ -49,19 +49,17 @@ document.getElementById('toggleButton').addEventListener('click', () => {
 });
 
 function injectTextIntoTextarea(text, url) {
-  const tryInject = (attempts = 5, delay = 500) => {
-    const textarea = document.querySelector('textarea');
-    if (textarea) {
-      textarea.value = text;
-      textarea.dispatchEvent(new Event('input', { bubbles: true }));
-      window.dispatchEvent(new CustomEvent('setJobUrl', { detail: { url } }));
-      console.log('Text injected:', text, 'URL:', url);
-    } else if (attempts > 0) {
-      console.log('Textarea not found, retrying...', attempts);
-      setTimeout(() => tryInject(attempts - 1, delay), delay);
-    } else {
-      console.error('No textarea found after retries.');
+  // Create and dispatch a custom event with the job description data
+  const event = new CustomEvent('AIpplyNowJobDescription', {
+    detail: {
+      text: text,
+      url: url
     }
-  };
-  tryInject();
+  });
+  
+  // Dispatch the event on both document and window to ensure it's caught
+  document.dispatchEvent(event);
+  window.dispatchEvent(event);
+  
+  console.log('Job description event dispatched:', { text, url });
 }
