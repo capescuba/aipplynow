@@ -28,6 +28,10 @@ class StartupProperties {
             this.setProperty('CLIENT_SECRET', dbProperties.LinkedInClientSecret);
             this.setProperty('JWT_PASSWORD', dbProperties.JwtPassword);
             this.setProperty('XAI_API_KEY', dbProperties.XaiApiKey);
+            this.setProperty('AWS_ACCESS_KEY_ID', dbProperties.AwsAccessKeyId);
+            this.setProperty('AWS_SECRET_ACCESS_KEY', dbProperties.AwsSecretAccessKey);
+            this.setProperty('AWS_REGION', dbProperties.AwsRegion);
+            this.setProperty('AWS_BUCKET_NAME', dbProperties.AwsBucketName);
         } catch (err) {
             console.error(err);
         }

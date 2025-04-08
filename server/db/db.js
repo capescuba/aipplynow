@@ -121,12 +121,32 @@ async function insertResumeMetadata(metadata) {
 async function getResumeMetadata(resumeId, userId) {
   let conn;
   try {
+    console.log(`[DEBUG] DB: Getting resume metadata for resumeId: ${resumeId}, userId: ${userId}`);
+    console.log(`[DEBUG] DB: Query parameters - resumeId type: ${typeof resumeId}, userId type: ${typeof userId}`);
+    
     conn = await pool.getConnection();
     const query = "SELECT * FROM resumes WHERE resume_id = ? AND user_id = ?";
+    console.log(`[DEBUG] DB: Executing query: ${query} with params: [${resumeId}, ${userId}]`);
+    
     const rows = await conn.query(query, [resumeId, userId]);
-    return rows.length > 0 ? rows[0] : null;
+    console.log('[DEBUG] DB: Query result:', rows);
+    
+    if (rows.length > 0) {
+      // Convert snake_case to camelCase for consistency
+      const resume = rows[0];
+      console.log('[DEBUG] DB: Found resume with s3_key:', resume.s3_key);
+      return {
+        ...resume,
+        s3Key: resume.s3_key, // Map s3_key to s3Key
+        originalName: resume.original_name,
+        uploadDate: resume.upload_date,
+        s3Url: resume.s3_url
+      };
+    }
+    console.log('[DEBUG] DB: No resume found in database');
+    return null;
   } catch (err) {
-    console.error("Error fetching resume metadata:", err);
+    console.error("[DEBUG] DB: Error fetching resume metadata:", err);
     throw err;
   } finally {
     if (conn) conn.end();
@@ -172,7 +192,8 @@ async function getConfig() {
   try {
     conn = await pool.getConnection();
     const query = `
-      SELECT LinkedInClientId, LinkedInClientSecret, JwtPassword, XaiApiKey
+      SELECT LinkedInClientId, LinkedInClientSecret, JwtPassword, XaiApiKey,
+             AwsAccessKeyId, AwsSecretAccessKey, AwsRegion, AwsBucketName
       FROM config
       LIMIT 1
     `;

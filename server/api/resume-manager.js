@@ -1,96 +1,123 @@
 // resumeModule.js
-const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require("@aws-sdk/client-s3");
+const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand } = require("@aws-sdk/client-s3");
 const { v4: uuidv4 } = require("uuid");
 const DB = require("../db/db.js");
+const config = require("../config/startup_properties.js");
 
 // Configure AWS S3 Client (v3)
-const s3Client = new S3Client({
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  },
-  region: process.env.AWS_REGION || "us-west-1",
-});
+function getS3Client() {
+  const accessKeyId = config.getProperty('AWS_ACCESS_KEY_ID');
+  const secretAccessKey = config.getProperty('AWS_SECRET_ACCESS_KEY');
+  const region = config.getProperty('AWS_REGION') || "us-west-1";
 
-const BUCKET_NAME = process.env.AWS_BUCKET_NAME || "aipplynow-resumes";
+  if (!accessKeyId || !secretAccessKey) {
+    throw new Error('AWS credentials not found in config');
+  }
 
-async function uploadResume(fileBuffer, userId, originalFileName) {
-  const resumeId = uuidv4();
-  const key = `${userId}/${resumeId}/${originalFileName}`;
+  return new S3Client({
+    credentials: {
+      accessKeyId,
+      secretAccessKey,
+    },
+    region,
+  });
+}
 
-  const params = {
-    Bucket: BUCKET_NAME,
-    Key: key,
-    Body: fileBuffer,
-    ContentType: "application/pdf",
-    ServerSideEncryption: "AES256",
-  };
+const BUCKET_NAME = config.getProperty('AWS_BUCKET_NAME') || "aipplynow-resumes";
 
+async function uploadResume(file, userId) {
+  const s3Client = getS3Client();
   try {
-    const command = new PutObjectCommand(params);
+    const fileExtension = file.originalname.split('.').pop();
+    const key = `${userId}/${uuidv4()}.${fileExtension}`;
+
+    const command = new PutObjectCommand({
+      Bucket: BUCKET_NAME,
+      Key: key,
+      Body: file.buffer,
+      ContentType: file.mimetype,
+    });
+
     await s3Client.send(command);
-    
-    const s3Url = `https://${BUCKET_NAME}.s3.us-west-1.amazonaws.com/${key}`;
-    
-    const resumeMetadata = {
-      resume_id: resumeId,
-      user_id: userId,
-      s3_key: key,
-      original_name: originalFileName,
-      upload_date: new Date().toISOString(),
-      s3_url: s3Url,
-    };
-    await DB.insertResumeMetadata(resumeMetadata);
+
+    const resumeId = await DB.saveResumeMetadata({
+      userId,
+      originalName: file.originalname,
+      s3Key: key,
+      fileType: file.mimetype,
+      size: file.size,
+    });
+
     return resumeId;
   } catch (error) {
-    console.error("Error uploading resume to S3:", error);
+    console.error("Error uploading resume:", error);
     throw error;
   }
 }
 
-async function getResumeFile(resumeId, userId) {
+async function getResumeFile(userId, resumeId) {
+  const s3Client = getS3Client();
+  const metadata = await DB.getResumeMetadata(resumeId, userId);
+  if (!metadata) {
+    throw new Error("Resume not found");
+  }
+
   try {
-    const resume = await DB.getResumeMetadata(resumeId, userId);
-    if (!resume) throw new Error("Resume not found");
-
-    const params = {
+    const command = new GetObjectCommand({
       Bucket: BUCKET_NAME,
-      Key: resume.s3_key,
-    };
-
-    const command = new GetObjectCommand(params);
-    const s3Object = await s3Client.send(command);
-    
-    // Use transformToByteArray to convert the stream to a Buffer
-    const byteArray = await s3Object.Body.transformToByteArray(); // Returns Uint8Array
-    const buffer = Buffer.from(byteArray);
-
-    return {
-      buffer: buffer,
-      originalName: resume.original_name,
-    };
+      Key: metadata.s3Key,
+    });
+    const response = await s3Client.send(command);
+    return response.Body;
   } catch (error) {
-    console.error("Error retrieving resume from S3:", error);
+    console.error("Error downloading resume:", error);
     throw error;
   }
 }
 
 async function deleteResume(resumeId, userId) {
+  const s3Client = getS3Client();
   try {
     const resume = await DB.getResumeMetadata(resumeId, userId);
-    if (!resume) throw new Error("Resume not found");
+    if (!resume) {
+      throw new Error("Resume not found");
+    }
 
-    const params = {
+    const command = new DeleteObjectCommand({
       Bucket: BUCKET_NAME,
-      Key: resume.s3_key,
-    };
+      Key: resume.s3Key,
+    });
 
-    const command = new DeleteObjectCommand(params);
     await s3Client.send(command);
     await DB.deleteResumeMetadata(resumeId, userId);
-    return true;
   } catch (error) {
     console.error("Error deleting resume:", error);
+    throw error;
+  }
+}
+
+async function getResumeMetadata(resumeId, userId) {
+  const s3Client = getS3Client();
+  try {
+    const resume = await DB.getResumeMetadata(resumeId, userId);
+    if (!resume) {
+      throw new Error("Resume not found");
+    }
+
+    const command = new HeadObjectCommand({
+      Bucket: BUCKET_NAME,
+      Key: resume.s3Key,
+    });
+
+    const metadata = await s3Client.send(command);
+    return {
+      ...resume,
+      size: metadata.ContentLength,
+      lastModified: metadata.LastModified,
+      contentType: metadata.ContentType,
+    };
+  } catch (error) {
+    console.error("Error getting resume metadata:", error);
     throw error;
   }
 }
@@ -99,4 +126,5 @@ module.exports = {
   uploadResume,
   getResumeFile,
   deleteResume,
+  getResumeMetadata,
 };
