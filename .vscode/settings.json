@@ -1,0 +1,54 @@
+{
+    "sqltools.connections": [
+        {
+            "mysqlOptions": {
+                "authProtocol": "default",
+                "enableSsl": "Disabled"
+            },
+            "previewLimit": 50,
+            "server": "172.16.0.124",
+            "port": 3306,
+            "driver": "MariaDB",
+            "database": "mysql",
+            "username": "capescuba",
+            "name": "aipplynow"
+        }
+    ],
+    "dbcode.connections": [
+        {
+            "connectionId": "Z0EwqSXwbx3wgDF_tUC0_",
+            "name": "aipplynow",
+            "driver": "mariadb",
+            "connectionType": "host",
+            "host": "172.16.0.123",
+            "port": 3306,
+            "ssl": false,
+            "username": "capescuba",
+            "password": "",
+            "savePassword": "secretStorage",
+            "database": "aipplynow",
+            "connectionTimeout": 30,
+            "driverOptions": {
+                "retrievePublickey": true
+            }
+        },
+        {
+            "connectionId": "oK0R--F8DP1qUUoYzSd_U",
+            "name": "AIpply-Dev",
+            "driver": "mysql",
+            "color": "#FFC54F",
+            "connectionType": "host",
+            "host": "aipply-dev.cqpuuixlpf5e.us-west-1.rds.amazonaws.com",
+            "port": 3306,
+            "ssl": true,
+            "sslTrustCertificate": false,
+            "username": "aipply",
+            "password": "",
+            "savePassword": "secretStorage",
+            "connectionTimeout": 500,
+            "driverOptions": {
+                "retrievePublickey": true
+            }
+        }
+    ]
+}
