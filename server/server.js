@@ -52,7 +52,11 @@ function decodeJWT(req, res, next) {
 }
 
 // Initialize server and middleware
-function startServer() {
+async function startServer() {
+  // Initialize startup properties
+  await CONFIG.init();
+  console.log("Initialized config:", CONFIG.properties);
+
   app.use(express.static(staticPath));
 
   app.use(
@@ -71,7 +75,7 @@ function startServer() {
 
   const server = app.listen(PORT, function () {
     console.log(`Server is running on port ${PORT}`);
-    console.log(CONFIG.properties);
+    console.log("Current config:", CONFIG.properties);
   });
 
   server.on('error', (error) => {
@@ -216,15 +220,31 @@ async function defineRoutes() {
       const userId = await DB.getUserIdByEmail(req.user.email);
       if (!userId) throw new Error("User not found");
       
-      const resumeFile = await resumeModule.getResumeFile(req.params.resume_id, userId);
+      const resumeFile = await resumeModule.getResumeFile(userId, req.params.resume_id);
       if (!resumeFile) return res.status(404).send({ error: "Resume not found" });
       
+      // Get the metadata for the original filename
+      const metadata = await DB.getResumeMetadata(req.params.resume_id, userId);
+      
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="${resumeFile.originalName}"`);
-      res.send(resumeFile.buffer);
+      res.setHeader("Content-Disposition", `attachment; filename="${metadata.original_name}"`);
+      
+      // Pipe the stream directly to the response
+      resumeFile.pipe(res);
+      
+      // Handle stream errors
+      resumeFile.on('error', (error) => {
+        console.error("Stream error:", error);
+        if (!res.headersSent) {
+          res.status(500).send({ error: "Failed to stream resume", message: error.message });
+        }
+      });
+      
     } catch (error) {
       console.error("Error downloading resume:", error);
-      res.status(500).send({ error: "Failed to download resume", message: error.message });
+      if (!res.headersSent) {
+        res.status(500).send({ error: "Failed to download resume", message: error.message });
+      }
     }
   });
 
@@ -266,6 +286,5 @@ async function defineRoutes() {
 
 // Initialize configuration and start server
 (async function () {
-  CONFIG.init();
   startServer();
 })();
