@@ -1,53 +1,24 @@
 // Home.js
 import React, { useState, useEffect } from "react";
 import {
-  Container,
   Typography,
-  Drawer,
-  List,
-  ListItem,
-  ListItemText,
-  IconButton,
-  styled,
   Box,
   Button,
-  CircularProgress,
+  Paper,
+  IconButton,
 } from "@mui/material";
+import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
+import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
 import Header from "./header";
 import PDFPreview from "./pdfPreview";
 import ResumeMetadata from "./resumeMetadata";
-import EditIcon from "@mui/icons-material/Edit";
-import DeleteIcon from "@mui/icons-material/Delete";
-
-const StyledListItem = styled(ListItem)(({ theme, selected }) => ({
-  backgroundColor: selected ? theme.palette.grey[300] : "inherit",
-  "&:hover": {
-    backgroundColor: theme.palette.grey[100],
-    cursor: "pointer",
-  },
-}));
-
-const MatrixCursor = styled("span")(({ theme }) => ({
-  display: "flex",
-  alignItems: "center",
-  fontFamily: '"Roboto Mono", "Courier New", monospace',
-  fontSize: "16px",
-  color: "#FFFFFF",
-  "& .prompt": {
-    marginRight: "2px",
-  },
-  "& .cursor": {
-    display: "inline-block",
-    width: "2px",
-    height: "16px",
-    backgroundColor: "#FFFFFF",
-    animation: "blink 0.7s infinite",
-  },
-  "@keyframes blink": {
-    "0%, 100%": { opacity: 1 },
-    "50%": { opacity: 0 },
-  },
-}));
+import {
+  LoadingState,
+  Toast,
+  ResumeList,
+  EmptyState,
+  TransitionComponent,
+} from "./common";
 
 function Home({
   onLogout,
@@ -61,22 +32,38 @@ function Home({
   currentTheme,
   toggleTheme,
 }) {
+  console.log("Home component rendering with props:", {
+    isLoggedIn,
+    currentTheme,
+    hasUserInfo: !!userInfo,
+    hasClientId: !!clientId,
+    hasRedirectUri: !!redirectUri
+  });
+
   const [resumes, setResumes] = useState([]);
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
   const [selectedResumeId, setSelectedResumeId] = useState(null);
   const [editingResume, setEditingResume] = useState(null);
   const [newResume, setNewResume] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [toast, setToast] = useState({ open: false, message: "", severity: "success" });
+  const [isResumesExpanded, setIsResumesExpanded] = useState(true);
 
   useEffect(() => {
     if (isLoggedIn) {
       fetchResumes();
+    } else {
+      setResumes([]);
+      setSelectedFile(null);
+      setSelectedResumeId(null);
+      setEditingResume(null);
+      setNewResume(null);
     }
   }, [isLoggedIn]);
 
   const fetchResumes = async () => {
     try {
+      setIsLoading(true);
       const response = await fetch("/api/users/me/resumes", {
         credentials: "include",
       });
@@ -85,6 +72,13 @@ function Home({
       setResumes(data);
     } catch (error) {
       console.error("Error fetching resumes:", error);
+      setToast({
+        open: true,
+        message: "Failed to fetch resumes. Please try again.",
+        severity: "error",
+      });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -101,15 +95,13 @@ function Home({
       return file;
     } catch (error) {
       console.error("Error fetching resume file:", error);
+      setToast({
+        open: true,
+        message: "Failed to fetch resume file. Please try again.",
+        severity: "error",
+      });
       return null;
     }
-  };
-
-  const toggleDrawer = (open) => (event) => {
-    if (event.type === "keydown" && (event.key === "Tab" || event.key === "Shift")) {
-      return;
-    }
-    setDrawerOpen(open);
   };
 
   const handleAddNewResume = (event) => {
@@ -119,9 +111,13 @@ function Home({
       setSelectedResumeId(null);
       setNewResume({ original_name: selectedFile.name });
       setEditingResume(null);
-      setDrawerOpen(true);
+      setSelectedFile(null);
     } else {
-      console.error("Please select a valid PDF file.");
+      setToast({
+        open: true,
+        message: "Please select a valid PDF file.",
+        severity: "error",
+      });
     }
   };
 
@@ -131,17 +127,19 @@ function Home({
       setSelectedResumeId(resumeId);
       const file = await fetchResumeFile(resumeId);
       if (file) {
-        console.log('Resume file fetched successfully:', file.name);
         setSelectedFile(file);
+        setToast({
+          open: true,
+          message: "Resume loaded successfully!",
+          severity: "success",
+        });
       } else {
-        console.error('Failed to fetch resume file');
         setSelectedFile(null);
       }
       setEditingResume(null);
       setNewResume(null);
-      setDrawerOpen(false);
     } catch (error) {
-      console.error('Error selecting resume:', error);
+      console.error("Error selecting resume:", error);
       setSelectedFile(null);
     } finally {
       setIsLoading(false);
@@ -169,8 +167,18 @@ function Home({
       }
       setEditingResume(null);
       setNewResume(null);
+      setToast({
+        open: true,
+        message: "Resume deleted successfully!",
+        severity: "success",
+      });
     } catch (error) {
       console.error("Error deleting resume:", error);
+      setToast({
+        open: true,
+        message: "Failed to delete resume. Please try again.",
+        severity: "error",
+      });
     }
   };
 
@@ -192,6 +200,11 @@ function Home({
         setResumes((prev) => [...prev, savedResume]);
         setSelectedResumeId(savedResume.resume_id);
         setNewResume(null);
+        setToast({
+          open: true,
+          message: "Resume uploaded successfully!",
+          severity: "success",
+        });
       } else {
         const response = await fetch(`/api/users/me/resumes/${updatedMetadata.resume_id}`, {
           method: "PUT",
@@ -208,11 +221,21 @@ function Home({
             r.resume_id === updatedMetadata.resume_id ? { ...r, ...updatedMetadata } : r
           )
         );
+        setToast({
+          open: true,
+          message: "Resume updated successfully!",
+          severity: "success",
+        });
       }
       setEditingResume(null);
       fetchResumes();
     } catch (error) {
       console.error("Error saving metadata:", error);
+      setToast({
+        open: true,
+        message: "Failed to save resume. Please try again.",
+        severity: "error",
+      });
     }
   };
 
@@ -220,15 +243,12 @@ function Home({
     fetchResumes();
   };
 
+  const handleCloseToast = () => {
+    setToast({ ...toast, open: false });
+  };
+
   return (
-    <Box
-      sx={{
-        minHeight: "100vh",
-        width: "100vw",
-        overflowX: "hidden",
-        position: "relative",
-      }}
-    >
+    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', width: '100%' }}>
       <Header
         userInfo={userInfo}
         isLoggedIn={isLoggedIn}
@@ -243,154 +263,198 @@ function Home({
       />
 
       {isLoggedIn && (
-        <Container
+        <Box
           sx={{
-            mt: 8,
-            p: 0,
-            height: "calc(100vh - 64px)",
-            width: "100%",
-            maxWidth: "100% !important",
-            boxSizing: "border-box",
+            mt: { xs: 8, sm: 9 },
+            flexGrow: 1,
+            display: "flex",
+            position: "relative",
+            overflow: "hidden",
           }}
         >
+          {/* Left Panel - Resumes List and Metadata */}
           <Box
             sx={{
-              position: "fixed",
-              left: drawerOpen ? "250px" : "0",
-              top: "50%",
-              transform: "translateY(-50%)",
-              zIndex: 1300,
-              transition: "left 0.3s ease-in-out",
+              position: 'absolute',
+              left: isResumesExpanded ? 0 : -280,
+              top: 0,
+              bottom: 0,
+              width: 280,
+              bgcolor: 'background.paper',
+              borderRight: 1,
+              borderColor: 'divider',
+              transition: 'left 0.3s ease',
+              zIndex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
             }}
           >
-            <IconButton
-              onClick={toggleDrawer(!drawerOpen)}
+            <Paper
+              elevation={0}
               sx={{
-                bgcolor: "#000000",
-                "&:hover": { bgcolor: "#1A1A1A" },
-                borderRadius: drawerOpen ? "50%" : "0 50% 50% 0",
-                padding: "8px",
-              }}
-              aria-label="Toggle resume drawer"
-            >
-              <MatrixCursor>
-                <span className="prompt">&gt;</span>
-                <span className="cursor" />
-              </MatrixCursor>
-            </IconButton>
-          </Box>
-
-          <Drawer anchor="left" open={drawerOpen} onClose={toggleDrawer(false)}>
-            <div
-              role="presentation"
-              onKeyDown={toggleDrawer(false)}
-              style={{
-                width: 250,
-                display: "flex",
-                flexDirection: "column",
-                height: "100%",
+                display: 'flex',
+                flexDirection: 'column',
+                height: '100%',
+                borderRadius: 0,
               }}
             >
-              <Typography variant="h6" sx={{ p: 2 }}>
-                Your Resumes
-              </Typography>
-              <List sx={{ flexGrow: 1 }}>
-                {resumes.length > 0 ? (
-                  resumes.map((resume) => (
-                    <React.Fragment key={resume.resume_id}>
-                      <StyledListItem
-                        selected={resume.resume_id === selectedResumeId}
-                        onClick={() => handleResumeSelect(resume.resume_id)}
-                      >
-                        <ListItemText primary={resume.original_name} />
-                        <IconButton
-                          edge="end"
-                          aria-label="edit"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleEditResume(resume);
-                          }}
-                        >
-                          <EditIcon fontSize="small" />
-                        </IconButton>
-                        <IconButton
-                          edge="end"
-                          aria-label="delete"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteResume(resume.resume_id);
-                          }}
-                        >
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
-                      </StyledListItem>
-                      {(editingResume?.resume_id === resume.resume_id || newResume) && (
-                        <Box sx={{ p: 1 }}>
-                          <ResumeMetadata
-                            resume={editingResume || newResume}
-                            onSave={handleSaveMetadata}
-                            isNew={!!newResume}
-                          />
-                        </Box>
-                      )}
-                    </React.Fragment>
-                  ))
-                ) : (
-                  <ListItem>
-                    <ListItemText primary="No resumes found" />
-                  </ListItem>
-                )}
-              </List>
-              <label htmlFor="add-new-resume">
-                <Button variant="contained" component="span" sx={{ m: 2 }}>
-                  Add New Resume
-                </Button>
-                <input
-                  id="add-new-resume"
-                  type="file"
-                  accept="application/pdf"
-                  hidden
-                  onChange={handleAddNewResume}
-                />
-              </label>
-            </div>
-          </Drawer>
-
-          <Box sx={{ 
-            height: "calc(100vh - 100px)", 
-            width: "100%", 
-            position: "relative", 
-            overflow: "hidden",
-            pl: drawerOpen ? "250px" : 0,
-            transition: "padding-left 0.3s ease-in-out"
-          }}>
-            {isLoading ? (
               <Box
                 sx={{
-                  position: "absolute",
-                  top: "50%",
-                  left: "50%",
-                  transform: "translate(-50%, -50%)",
+                  p: 2,
                   display: "flex",
-                  flexDirection: "column",
+                  justifyContent: "space-between",
                   alignItems: "center",
-                  gap: 2,
+                  borderBottom: 1,
+                  borderColor: 'divider',
                 }}
               >
-                <CircularProgress />
-                <Typography>Loading resume...</Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Typography variant="h6" component="h1" noWrap>
+                    My Resumes
+                  </Typography>
+                </Box>
+                <Button
+                  variant="contained"
+                  component="label"
+                  color="primary"
+                  size="small"
+                  sx={{ textTransform: "none", minWidth: 0 }}
+                >
+                  Upload
+                  <input
+                    type="file"
+                    hidden
+                    accept=".pdf"
+                    onChange={handleAddNewResume}
+                  />
+                </Button>
               </Box>
-            ) : (
-              <PDFPreview
-                setFile={setSelectedFile}
-                initialFile={selectedFile}
-                resumeId={selectedResumeId}
-                onSaveSuccess={handleSaveSuccess}
-              />
-            )}
+
+              <Box sx={{ flexGrow: 1, overflow: 'auto', p: 2 }}>
+                {isLoading ? (
+                  <LoadingState />
+                ) : resumes.length === 0 ? (
+                  <EmptyState
+                    message="No resumes uploaded yet"
+                    action="Upload Resume"
+                    onAction={() => document.querySelector('input[type="file"]').click()}
+                  />
+                ) : (
+                  <TransitionComponent>
+                    <ResumeList
+                      resumes={resumes}
+                      onSelect={handleResumeSelect}
+                      onEdit={handleEditResume}
+                      onDelete={handleDeleteResume}
+                      selectedId={selectedResumeId}
+                    />
+                  </TransitionComponent>
+                )}
+
+                {selectedFile && (
+                  <Box sx={{ mt: 2 }}>
+                    <ResumeMetadata
+                      resume={editingResume || newResume}
+                      onSave={handleSaveMetadata}
+                      onSaveSuccess={handleSaveSuccess}
+                    />
+                  </Box>
+                )}
+              </Box>
+            </Paper>
           </Box>
-        </Container>
+
+          {/* Toggle Button */}
+          <IconButton
+            size="small"
+            onClick={() => setIsResumesExpanded(!isResumesExpanded)}
+            sx={{
+              position: 'absolute',
+              left: isResumesExpanded ? 280 : 0,
+              top: 20,
+              zIndex: 2,
+              bgcolor: 'background.paper',
+              border: 1,
+              borderColor: 'divider',
+              borderLeft: isResumesExpanded ? 1 : 0,
+              borderRight: isResumesExpanded ? 0 : 1,
+              borderRadius: isResumesExpanded ? '0 4px 4px 0' : '4px',
+              transition: 'left 0.3s ease',
+              '&:hover': {
+                bgcolor: 'action.hover',
+              },
+            }}
+          >
+            {isResumesExpanded ? <KeyboardArrowLeftIcon /> : <KeyboardArrowRightIcon />}
+          </IconButton>
+
+          {/* Main Content */}
+          <Box
+            sx={{
+              flexGrow: 1,
+              ml: isResumesExpanded ? '280px' : 0,
+              transition: 'margin-left 0.3s ease',
+              display: 'flex',
+              gap: 2,
+              p: 2,
+            }}
+          >
+            {/* PDF Preview */}
+            <Box
+              sx={{
+                flexGrow: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 2,
+              }}
+            >
+              <Paper
+                sx={{
+                  flexGrow: 1,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  bgcolor: 'background.paper',
+                  borderRadius: 1,
+                  boxShadow: 1,
+                  overflow: 'hidden',
+                  minWidth: 0, // Allows the paper to shrink below its content size
+                }}
+              >
+                {selectedFile ? (
+                  <PDFPreview
+                    file={selectedFile}
+                    resumeId={selectedResumeId}
+                    onSaveSuccess={handleSaveSuccess}
+                  />
+                ) : (
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      height: '100%',
+                      p: 3,
+                    }}
+                  >
+                    <EmptyState
+                      message="Select a resume to preview and edit"
+                      action={null}
+                    />
+                  </Box>
+                )}
+              </Paper>
+            </Box>
+          </Box>
+        </Box>
       )}
+
+      <Toast
+        open={toast.open}
+        message={toast.message}
+        severity={toast.severity}
+        onClose={handleCloseToast}
+      />
     </Box>
   );
 }

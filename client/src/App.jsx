@@ -7,86 +7,14 @@ import {
   Navigate,
   useNavigate,
 } from "react-router-dom";
-import { CssBaseline, ThemeProvider } from "@mui/material";
-import { createTheme } from "@mui/material/styles";
+import { CssBaseline, ThemeProvider, Box, Typography } from "@mui/material";
 import "./App.css";
 import LinkedInCallback from "./components/linkedInCallback";
 import Home from "./components/home";
 import Session from "./libs/session";
+import { modernTheme, matrixTheme } from "./themes";
 
 const SESSION_TIMEOUT = 120000;
-
-const matrixTheme = createTheme({
-  palette: {
-    mode: "dark",
-    background: { default: "#0D0D0D", paper: "#1A1A1A" },
-    primary: { main: "#00CC00" },
-    text: { primary: "#00FF00", secondary: "#B3B3B3" },
-  },
-  typography: {
-    fontFamily: '"Roboto Mono", "Courier New", monospace',
-    h4: { fontWeight: 700 },
-    h6: { fontWeight: 600 },
-    body1: { fontSize: "0.95rem" },
-  },
-  components: {
-    MuiAppBar: {
-      styleOverrides: {
-        root: {
-          backgroundColor: "#0D0D0D",
-          boxShadow: "0 0 10px rgba(0, 255, 0, 0.2)",
-          overflow: "visible",
-          width: "100%",
-          maxWidth: "none",
-        },
-      },
-    },
-    MuiButton: {
-      styleOverrides: {
-        root: {
-          textTransform: "none",
-          "&:hover": { boxShadow: "0 0 5px rgba(0, 255, 0, 0.5)" },
-        },
-      },
-    },
-  },
-});
-
-const vanillaTheme = createTheme({
-  palette: {
-    mode: "light",
-    background: { default: "#f5f5f5", paper: "#ffffff" },
-    primary: { main: "#1976d2" },
-    text: { primary: "#000000", secondary: "#666666" },
-  },
-  typography: {
-    fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif',
-    h4: { fontWeight: 700 },
-    h6: { fontWeight: 600 },
-    body1: { fontSize: "0.95rem" },
-  },
-  components: {
-    MuiAppBar: {
-      styleOverrides: {
-        root: {
-          backgroundColor: "#1976d2",
-          boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
-          overflow: "visible",
-          width: "100%",
-          maxWidth: "none",
-        },
-      },
-    },
-    MuiButton: {
-      styleOverrides: {
-        root: {
-          textTransform: "none",
-          "&:hover": { boxShadow: "0 0 5px rgba(0,0,0,0.2)" },
-        },
-      },
-    },
-  },
-});
 
 function MatrixBackground() {
   const canvasRef = useRef(null);
@@ -108,7 +36,7 @@ function MatrixBackground() {
       ctx.fillStyle = "rgba(13, 13, 13, 0.05)";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      ctx.fillStyle = "rgba(0, 204, 0, 0.5)"; // Darker green (#00CC00) with 50% opacity
+      ctx.fillStyle = "rgba(0, 204, 0, 0.5)";
       ctx.font = `${fontSize}px "Roboto Mono", monospace`;
 
       for (let i = 0; i < drops.length; i++) {
@@ -151,7 +79,7 @@ function MatrixBackground() {
         top: 0,
         left: 0,
         zIndex: 0,
-        opacity: 0.4, // Reduced opacity
+        opacity: 0.4,
       }}
     />
   );
@@ -207,9 +135,19 @@ function App({ currentTheme, toggleTheme }) {
   useEffect(() => {
     const fetchData = async () => {
       try {
+        console.log("Fetching config data...");
         const response = await fetch("/api/config");
-        if (!response.ok) throw new Error("Network response was not ok");
+        console.log("Config response status:", response.status);
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error("Config fetch failed:", response.status, errorText);
+          throw new Error(`Network response was not ok: ${response.status} ${errorText}`);
+        }
+        
         const jsonData = await response.json();
+        console.log("Config data received:", jsonData);
+        
         setConfigData(jsonData);
         setAuthState({
           isLoggedIn: jsonData.isLoggedIn,
@@ -217,6 +155,7 @@ function App({ currentTheme, toggleTheme }) {
         });
         Session.setSessionStorageWithTimeout("userInfo", JSON.stringify(jsonData.userInfo), SESSION_TIMEOUT);
       } catch (err) {
+        console.error("Error fetching config:", err);
         setError(err.message);
       } finally {
         setLoading(false);
@@ -225,12 +164,30 @@ function App({ currentTheme, toggleTheme }) {
     fetchData();
   }, []);
 
-  if (loading) return <div className="App">Loading...</div>;
-  if (error) return <div className="App">Error: {error}</div>;
+  if (loading) return (
+    <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+      <Typography variant="h6">Loading...</Typography>
+      <Typography variant="body2" color="text.secondary">
+        Connecting to server...
+      </Typography>
+    </Box>
+  );
+  
+  if (error) return (
+    <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+      <Typography variant="h6" color="error">Error</Typography>
+      <Typography variant="body1" color="error">
+        {error}
+      </Typography>
+      <Typography variant="body2" color="text.secondary">
+        Please ensure the server is running and try again.
+      </Typography>
+    </Box>
+  );
 
   console.log("App - Rendering, isLoggedIn:", authState.isLoggedIn);
   return (
-    <div className={`App ${currentTheme === "matrix" ? "matrix-theme" : ""}`}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       {currentTheme === "matrix" && <MatrixBackground />}
       <CssBaseline />
       <Routes>
@@ -254,24 +211,34 @@ function App({ currentTheme, toggleTheme }) {
         <Route path="/callback" element={<LinkedInCallback />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
-    </div>
+    </Box>
   );
 }
 
 export default function AppWrapper() {
-  const [currentTheme, setCurrentTheme] = useState("vanilla");
-  const theme = currentTheme === "matrix" ? matrixTheme : vanillaTheme;
+  const [currentTheme, setCurrentTheme] = useState("modern");
+  const theme = currentTheme === "matrix" ? matrixTheme : modernTheme;
+
+  console.log("Current theme:", currentTheme);
+  console.log("Theme object:", theme);
 
   const toggleTheme = () => {
-    console.log("Toggling theme from", currentTheme, "to", currentTheme === "matrix" ? "vanilla" : "matrix");
-    setCurrentTheme(currentTheme === "matrix" ? "vanilla" : "matrix");
+    console.log("Toggling theme from", currentTheme, "to", currentTheme === "matrix" ? "modern" : "matrix");
+    setCurrentTheme(currentTheme === "matrix" ? "modern" : "matrix");
   };
 
   return (
     <ThemeProvider theme={theme}>
-      <Router>
-        <App currentTheme={currentTheme} toggleTheme={toggleTheme} />
-      </Router>
+      <Box sx={{ 
+        width: '100%', 
+        minHeight: '100vh',
+        bgcolor: 'background.default',
+        color: 'text.primary'
+      }}>
+        <Router>
+          <App currentTheme={currentTheme} toggleTheme={toggleTheme} />
+        </Router>
+      </Box>
     </ThemeProvider>
   );
 }

@@ -218,27 +218,41 @@ async function defineRoutes() {
   app.get("/api/users/me/resumes/:resume_id/download", decodeJWT, async (req, res) => {
     try {
       const userId = await DB.getUserIdByEmail(req.user.email);
-      if (!userId) throw new Error("User not found");
+      if (!userId) {
+        return res.status(404).send({ error: "User not found" });
+      }
       
-      const resumeFile = await resumeModule.getResumeFile(userId, req.params.resume_id);
-      if (!resumeFile) return res.status(404).send({ error: "Resume not found" });
-      
-      // Get the metadata for the original filename
       const metadata = await DB.getResumeMetadata(req.params.resume_id, userId);
+      if (!metadata) {
+        return res.status(404).send({ error: "Resume not found" });
+      }
+
+      const resumeFile = await resumeModule.getResumeFile(userId, req.params.resume_id);
+      if (!resumeFile) {
+        return res.status(404).send({ error: "Resume file not found" });
+      }
       
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `attachment; filename="${metadata.original_name}"`);
       
-      // Pipe the stream directly to the response
-      resumeFile.pipe(res);
-      
-      // Handle stream errors
+      // Handle stream errors before piping
       resumeFile.on('error', (error) => {
         console.error("Stream error:", error);
+        // Only send error if headers haven't been sent
         if (!res.headersSent) {
           res.status(500).send({ error: "Failed to stream resume", message: error.message });
         }
       });
+
+      // End the response when the stream ends
+      resumeFile.on('end', () => {
+        if (!res.headersSent) {
+          res.end();
+        }
+      });
+
+      // Pipe the stream to response
+      resumeFile.pipe(res);
       
     } catch (error) {
       console.error("Error downloading resume:", error);
