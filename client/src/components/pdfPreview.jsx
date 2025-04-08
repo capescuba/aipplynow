@@ -9,7 +9,7 @@ import { tintPdfBackground } from '../libs/pdfUtils';
 // Set up PDF.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = '/pdfjs/pdf.worker.min.js';
 
-function PDFPreview({ setFile, initialFile, resumeId, onSaveSuccess }) {
+function PDFPreview({ file: initialFile, resumeId, onSaveSuccess }) {
   const [file, setLocalFile] = useState(null); // Tinted PDF
   const [originalFile, setOriginalFile] = useState(initialFile); // Original PDF
   const [numPages, setNumPages] = useState(null);
@@ -44,12 +44,12 @@ function PDFPreview({ setFile, initialFile, resumeId, onSaveSuccess }) {
 
   // Listen for job description from Chrome extension
   useEffect(() => {
+    let isSubscribed = true;
     const handleJobDescriptionEvent = (event) => {
-      console.log('Received job description event:', event);
+      if (!isSubscribed) return;
       
       // Handle CustomEvent
       if (event.detail && event.detail.text) {
-        console.log('Setting job description from CustomEvent:', event.detail);
         setJobDesc(event.detail.text);
         if (event.detail.url) {
           setUrl(event.detail.url);
@@ -59,7 +59,6 @@ function PDFPreview({ setFile, initialFile, resumeId, onSaveSuccess }) {
       
       // Handle postMessage
       if (event.data && event.data.type === 'AIpplyNowJobDescription') {
-        console.log('Setting job description from postMessage:', event.data);
         setJobDesc(event.data.text);
         if (event.data.url) {
           setUrl(event.data.url);
@@ -68,34 +67,25 @@ function PDFPreview({ setFile, initialFile, resumeId, onSaveSuccess }) {
       }
     };
 
-    // Check for direct window property updates
-    const checkWindowData = () => {
-      if (window.AIpplyNowData) {
-        console.log('Setting job description from window property:', window.AIpplyNowData);
-        setJobDesc(window.AIpplyNowData.text);
-        if (window.AIpplyNowData.url) {
-          setUrl(window.AIpplyNowData.url);
-        }
-        window.AIpplyNowData = null; // Clear the data after using it
-      }
-    };
-
-    // Set up all event listeners
+    // Set up event listeners
     document.addEventListener('AIpplyNowJobDescription', handleJobDescriptionEvent);
-    window.addEventListener('AIpplyNowJobDescription', handleJobDescriptionEvent);
     window.addEventListener('message', handleJobDescriptionEvent);
     
-    // Check for window property periodically
-    const intervalId = setInterval(checkWindowData, 1000);
+    // Check window property once on mount
+    if (window.AIpplyNowData) {
+      setJobDesc(window.AIpplyNowData.text);
+      if (window.AIpplyNowData.url) {
+        setUrl(window.AIpplyNowData.url);
+      }
+      window.AIpplyNowData = null;
+    }
 
-    // Cleanup
     return () => {
+      isSubscribed = false;
       document.removeEventListener('AIpplyNowJobDescription', handleJobDescriptionEvent);
-      window.removeEventListener('AIpplyNowJobDescription', handleJobDescriptionEvent);
       window.removeEventListener('message', handleJobDescriptionEvent);
-      clearInterval(intervalId);
     };
-  }, []);
+  }, []); // Empty dependency array since we only want to set this up once
 
   // Auto-adjust scale based on container width
   useEffect(() => {
@@ -132,6 +122,7 @@ function PDFPreview({ setFile, initialFile, resumeId, onSaveSuccess }) {
         .catch((error) => {
           console.error('PDFPreview - Error tinting PDF:', error);
           // Keep using the original file if tinting fails
+          setLocalFile(initialFile);
         })
         .finally(() => {
           setLoading(false);
@@ -201,21 +192,11 @@ function PDFPreview({ setFile, initialFile, resumeId, onSaveSuccess }) {
   const handleFileChange = async (event) => {
     const file = event.target.files[0];
     if (file) {
-      setFile(file);
-      setLoading(true);
-      setUploadStatus(null);
-
-      try {
-        const tintedFile = await tintPdfBackground(file);
-        setLocalFile(tintedFile);
-        setOriginalFile(file);
-        setNumPages(null);
-        setPageNumber(1);
-        setScale(1.0);
-      } catch (error) {
-        console.error('Error processing PDF:', error);
-        setUploadStatus('Error processing PDF. Please try again.');
-      }
+      setLocalFile(file);
+      setOriginalFile(file);
+      setNumPages(null);
+      setPageNumber(1);
+      setScale(1.0);
     }
   };
 

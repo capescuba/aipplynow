@@ -3,44 +3,27 @@ import React, { useState } from "react";
 import {
   AppBar,
   Toolbar,
-  IconButton,
   Typography,
-  Avatar,
+  Button,
+  IconButton,
   Menu,
   MenuItem,
+  Avatar,
+  Box,
+  useTheme,
+  useMediaQuery,
+  Tooltip,
 } from "@mui/material";
-import HomeIcon from "@mui/icons-material/Home";
-import NotificationsIcon from "@mui/icons-material/Notifications";
-import SettingsIcon from "@mui/icons-material/Settings";
-import { styled } from "@mui/system";
-import { LinkedIn } from "react-linkedin-login-oauth2";
-import linkedin from "react-linkedin-login-oauth2/assets/linkedin.png";
-import { useTheme } from "@mui/material/styles";
+import {
+  Brightness4 as DarkModeIcon,
+  Brightness7 as LightModeIcon,
+  AccountCircle,
+  Login as LoginIcon,
+  Logout as LogoutIcon,
+} from "@mui/icons-material";
+import { spacing } from "../themes";
 
-// Styled components
-const Root = styled("div")({
-  flexGrow: 1,
-});
-
-const MenuButton = styled(IconButton)(({ theme }) => ({
-  marginRight: theme.spacing(2),
-  color: theme.palette.text.primary,
-}));
-
-const Title = styled(Typography)({
-  whiteSpace: "nowrap",
-});
-
-const Profile = styled(Avatar)(({ theme }) => ({
-  marginLeft: theme.spacing(2),
-  cursor: "pointer",
-  border: `1px solid ${theme.palette.primary.main}`,
-  "&:hover": {
-    boxShadow: `0 0 5px ${theme.palette.primary.main}`,
-  },
-}));
-
-const Header = ({
+function Header({
   userInfo,
   isLoggedIn,
   clientId,
@@ -51,185 +34,137 @@ const Header = ({
   onLogout,
   currentTheme,
   toggleTheme,
-}) => {
-  const [anchorEl, setAnchorEl] = useState(null);
-  const [settingsAnchorEl, setSettingsAnchorEl] = useState(null);
-  const open = Boolean(anchorEl);
-  const settingsOpen = Boolean(settingsAnchorEl);
+}) {
+  console.log("Header component rendering with props:", {
+    isLoggedIn,
+    currentTheme,
+    hasUserInfo: !!userInfo,
+    hasClientId: !!clientId
+  });
+
   const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const [anchorEl, setAnchorEl] = useState(null);
 
   const handleMenu = (event) => {
     setAnchorEl(event.currentTarget);
-  };
-
-  const handleSettingsMenu = (event) => {
-    setSettingsAnchorEl(event.currentTarget);
   };
 
   const handleClose = () => {
     setAnchorEl(null);
   };
 
-  const handleSettingsClose = () => {
-    setSettingsAnchorEl(null);
+  const handleLogin = () => {
+    const linkedInUrl = `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}&state=${state}`;
+    window.open(linkedInUrl, "_blank");
   };
-
-  const handleLogoutClick = () => {
-    onLogout();
-    handleClose();
-  };
-
-  console.log("Header - isLoggedIn:", isLoggedIn);
-  console.log("Header - userInfo:", userInfo);
-  console.log("Header - Rendering right side:", isLoggedIn ? "Logged In" : "Logged Out");
 
   return (
-    <Root>
-      <AppBar
-        position="fixed"
-        sx={{
-          top: 0,
-          left: 0,
-          width: "100%",
-          zIndex: 1200,
-          borderBottom: `1px solid ${theme.palette.primary.main}`,
-          overflowX: "visible",
-        }}
-      >
-        <Toolbar
+    <AppBar 
+      position="fixed" 
+      sx={{ 
+        zIndex: theme.zIndex.drawer + 1,
+        bgcolor: 'background.paper',
+        borderBottom: 1,
+        borderColor: 'divider'
+      }}
+    >
+      <Toolbar>
+        <Typography
+          variant="h6"
+          component="div"
           sx={{
-            minHeight: 64,
-            padding: "0 16px",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            flexWrap: "nowrap",
-            width: "100%",
+            flexGrow: 1,
+            fontFamily: currentTheme === "matrix" ? '"Roboto Mono", monospace' : "inherit",
+            color: currentTheme === "matrix" ? "#00FF00" : theme.palette.text.primary,
           }}
         >
-          {/* Left Side */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              flexShrink: 0,
-              maxWidth: "50%",
-            }}
-          >
-            <MenuButton edge="start" aria-label="home">
-              <HomeIcon />
-            </MenuButton>
-            <Title variant="h4">Neo Resume</Title>
-          </div>
+          AIpplyNow
+        </Typography>
 
-          {/* Right Side */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "flex-end",
-              flexShrink: 0,
-              flexGrow: 1,
-              minWidth: "300px",
-              maxWidth: "50%",
-              paddingRight: "16px",
-              overflow: "visible",
-            }}
-          >
-            {isLoggedIn ? (
-              <>
-                <Typography
-                  variant="body1"
-                  sx={{
-                    marginRight: "16px",
-                    whiteSpace: "nowrap",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    maxWidth: "none",
-                    visibility: "visible",
-                  }}
-                >
-                  Welcome {userInfo?.name || "User"}
-                </Typography>
+        <Box sx={{ display: "flex", alignItems: "center", gap: spacing.sm }}>
+          <Tooltip title={`Switch to ${currentTheme === "matrix" ? "modern" : "matrix"} theme`}>
+            <IconButton
+              onClick={toggleTheme}
+              color="inherit"
+              sx={{
+                transition: "transform 0.2s ease-in-out",
+                "&:hover": {
+                  transform: "rotate(180deg)",
+                },
+              }}
+            >
+              {currentTheme === "matrix" ? <LightModeIcon /> : <DarkModeIcon />}
+            </IconButton>
+          </Tooltip>
+
+          {isLoggedIn ? (
+            <>
+              <Tooltip title="Account settings">
                 <IconButton
-                  aria-label="notifications"
-                  sx={{ margin: "0 8px", visibility: "visible" }}
-                >
-                  <NotificationsIcon />
-                </IconButton>
-                <IconButton
-                  aria-label="settings"
-                  onClick={handleSettingsMenu}
-                  sx={{ margin: "0 8px", visibility: "visible" }}
-                >
-                  <SettingsIcon />
-                </IconButton>
-                <Profile
-                  alt="Profile Picture"
-                  src={userInfo?.picture || ""}
                   onClick={handleMenu}
-                  sx={{ visibility: "visible" }}
-                />
-                <Menu
-                  anchorEl={anchorEl}
-                  open={open}
-                  onClose={handleClose}
-                  anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-                  transformOrigin={{ vertical: "top", horizontal: "right" }}
+                  size="large"
+                  aria-label="account of current user"
+                  aria-controls="menu-appbar"
+                  aria-haspopup="true"
+                  color="inherit"
                 >
-                  <MenuItem onClick={handleLogoutClick}>Logout</MenuItem>
-                </Menu>
-                <Menu
-                  anchorEl={settingsAnchorEl}
-                  open={settingsOpen}
-                  onClose={handleSettingsClose}
-                  anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-                  transformOrigin={{ vertical: "top", horizontal: "right" }}
-                >
-                  <MenuItem 
-                    onClick={() => {
-                      toggleTheme();
-                      handleSettingsClose();
-                    }}
-                  >
-                    Switch to {currentTheme === "matrix" ? "Vanilla" : "Matrix"} Theme
-                  </MenuItem>
-                </Menu>
-              </>
-            ) : (
-              <LinkedIn
-                clientId={clientId}
-                redirectUri={redirectUri}
-                scope={scope}
-                state={state}
-                onSuccess={(code) => {
-                  console.log("LinkedIn Success Code:", code);
-                  onLoginSuccess(code);
+                  {userInfo?.picture ? (
+                    <Avatar
+                      src={userInfo.picture}
+                      alt={userInfo.name}
+                      sx={{ width: 32, height: 32 }}
+                    />
+                  ) : (
+                    <AccountCircle />
+                  )}
+                </IconButton>
+              </Tooltip>
+              <Menu
+                id="menu-appbar"
+                anchorEl={anchorEl}
+                anchorOrigin={{
+                  vertical: "bottom",
+                  horizontal: "right",
                 }}
-                onError={(error) => {
-                  console.log("LinkedIn Error:", error);
+                keepMounted
+                transformOrigin={{
+                  vertical: "top",
+                  horizontal: "right",
                 }}
+                open={Boolean(anchorEl)}
+                onClose={handleClose}
               >
-                {({ linkedInLogin }) => (
-                  <img
-                    onClick={linkedInLogin}
-                    src={linkedin}
-                    alt="Sign in with LinkedIn"
-                    style={{
-                      maxWidth: "180px",
-                      cursor: "pointer",
-                      filter: `drop-shadow(0 0 3px ${theme.palette.primary.main})`,
-                      visibility: "visible",
-                    }}
-                  />
-                )}
-              </LinkedIn>
-            )}
-          </div>
-        </Toolbar>
-      </AppBar>
-    </Root>
+                <MenuItem disabled>
+                  <Typography variant="body2" color="text.secondary">
+                    {userInfo?.name || "User"}
+                  </Typography>
+                </MenuItem>
+                <MenuItem onClick={onLogout}>
+                  <LogoutIcon fontSize="small" sx={{ mr: 1 }} />
+                  Logout
+                </MenuItem>
+              </Menu>
+            </>
+          ) : (
+            <Button
+              color="inherit"
+              onClick={handleLogin}
+              startIcon={<LoginIcon />}
+              sx={{
+                textTransform: "none",
+                "&:hover": {
+                  backgroundColor: "rgba(255, 255, 255, 0.1)",
+                },
+              }}
+            >
+              {isMobile ? "Login" : "Login with LinkedIn"}
+            </Button>
+          )}
+        </Box>
+      </Toolbar>
+    </AppBar>
   );
-};
+}
 
 export default Header;
