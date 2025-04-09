@@ -169,20 +169,24 @@ async function defineRoutes() {
 
   app.post("/api/users/me/resumes/:resume_id/parse", decodeJWT, async (req, res) => {
     try {
-      const resumeId = req.params.resume_id;
+      const resumeId = parseInt(req.params.resume_id);
       const userId = await DB.getUserIdByEmail(req.user.email);
       if (!userId) throw new Error("User not found");
 
-      const resumeFile = await resumeModule.getResumeFile(resumeId, userId);
-      if (!resumeFile) throw new Error("Resume not found");
+      const resumeBuffer = await resumeModule.getResumeFile(userId, resumeId);
+      if (!resumeBuffer) throw new Error("Resume not found");
 
-      const data = await Resumehandler.parseResume(resumeFile.buffer, req.body.job_desc);
+      const data = await Resumehandler.parseResume(resumeBuffer, req.body.job_description);
+      
+      if (!data) {
+        throw new Error("Failed to parse resume");
+      }
+
       await DB.insertResumeAnalysis(data, userId);
-
-      res.send({ resume_id: resumeId, data });
+      res.json({ resume_id: resumeId, data });
     } catch (error) {
       console.error("Error in resume parsing:", error);
-      res.status(500).send({ error: "Failed to parse resume", message: error.message });
+      res.status(500).json({ error: "Failed to parse resume", message: error.message });
     }
   });
 
@@ -227,32 +231,17 @@ async function defineRoutes() {
         return res.status(404).send({ error: "Resume not found" });
       }
 
-      const resumeFile = await resumeModule.getResumeFile(userId, req.params.resume_id);
-      if (!resumeFile) {
+      const resumeBuffer = await resumeModule.getResumeFile(userId, req.params.resume_id);
+      if (!resumeBuffer) {
         return res.status(404).send({ error: "Resume file not found" });
       }
       
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `attachment; filename="${metadata.original_name}"`);
+      res.setHeader("Content-Length", resumeBuffer.length);
       
-      // Handle stream errors before piping
-      resumeFile.on('error', (error) => {
-        console.error("Stream error:", error);
-        // Only send error if headers haven't been sent
-        if (!res.headersSent) {
-          res.status(500).send({ error: "Failed to stream resume", message: error.message });
-        }
-      });
-
-      // End the response when the stream ends
-      resumeFile.on('end', () => {
-        if (!res.headersSent) {
-          res.end();
-        }
-      });
-
-      // Pipe the stream to response
-      resumeFile.pipe(res);
+      // Send the buffer directly
+      res.end(resumeBuffer);
       
     } catch (error) {
       console.error("Error downloading resume:", error);

@@ -22,7 +22,7 @@ function ResumeParser({
   currentResumeId,
   uploadStatus,
   scoreData,
-  onParse,
+  onAnalyze,
 }) {
   const theme = useTheme();
   const handleJobDescChange = (event) => setJobDesc(event.target.value);
@@ -74,8 +74,8 @@ function ResumeParser({
 
         <Button
           variant="contained"
-          onClick={onParse}
-          disabled={!currentResumeId || loading || !jobDesc.trim()}
+          onClick={onAnalyze}
+          disabled={loading || (!jobDesc.trim() && !url)}
           sx={{ alignSelf: 'flex-start' }}
         >
           {loading ? (
@@ -97,7 +97,7 @@ function ResumeParser({
           </Typography>
         )}
 
-        {scoreData && scoreData.breakdown && (
+        {scoreData && (
           <>
             <Divider sx={{ my: 2 }} />
             
@@ -105,11 +105,11 @@ function ResumeParser({
               Score Breakdown
             </Typography>
             <List dense>
-              {Object.entries(scoreData.breakdown).map(([key, value]) => (
+              {Object.entries(scoreData.breakdown || {}).map(([key, value]) => (
                 <ListItem key={key}>
                   <ListItemText
-                    primary={`${key.charAt(0).toUpperCase() + key.slice(1)}`}
-                    secondary={`${value.toFixed(1)}%`}
+                    primary={`${key.charAt(0).toUpperCase() + key.slice(1).replace(/_/g, ' ')}`}
+                    secondary={`${(value * 100).toFixed(1)}%`}
                   />
                 </ListItem>
               ))}
@@ -119,7 +119,7 @@ function ResumeParser({
               Improvement Suggestions
             </Typography>
             <List dense>
-              {scoreData.suggestions.map((suggestion, index) => (
+              {(scoreData.improvement_suggestions || []).map((suggestion, index) => (
                 <ListItem key={index}>
                   <ListItemText
                     primary={suggestion}
@@ -134,7 +134,7 @@ function ResumeParser({
               ))}
             </List>
 
-            {scoreData.data && (
+            {scoreData && (
               <>
                 <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>
                   Resume Data
@@ -143,19 +143,19 @@ function ResumeParser({
                   <ListItem>
                     <ListItemText
                       primary="Skills"
-                      secondary={scoreData.data.skills.join(', ')}
+                      secondary={(scoreData.skills || []).join(', ')}
                     />
                   </ListItem>
                   <ListItem>
                     <ListItemText
                       primary="Total Experience"
-                      secondary={`${scoreData.data.total_experience_years} years`}
+                      secondary={`${scoreData.total_experience_years || 0} years`}
                     />
                   </ListItem>
                   <ListItem>
                     <ListItemText
                       primary="Relevant Experience"
-                      secondary={Object.entries(scoreData.data.relevant_experience)
+                      secondary={Object.entries(scoreData.relevant_experience || {})
                         .map(([role, years]) => `${role}: ${years} years`)
                         .join(', ')}
                     />
@@ -163,13 +163,13 @@ function ResumeParser({
                   <ListItem>
                     <ListItemText
                       primary="Education"
-                      secondary={scoreData.data.education.length > 0 ? scoreData.data.education.join(', ') : 'None'}
+                      secondary={(scoreData.education || []).length > 0 ? scoreData.education.join(', ') : 'None'}
                     />
                   </ListItem>
                   <ListItem>
                     <ListItemText
                       primary="Certifications"
-                      secondary={scoreData.data.certifications.length > 0 ? scoreData.data.certifications.join(', ') : 'None'}
+                      secondary={(scoreData.certifications || []).length > 0 ? scoreData.certifications.join(', ') : 'None'}
                     />
                   </ListItem>
                 </List>

@@ -24,7 +24,7 @@ async function parseResume(resumeBuffer, jobDescription) {
     });
 
     // Append the job description as a text field
-    formData.append('job_desc', jobDescription);
+    formData.append('job_description', jobDescription);
 
     // Send the POST request to the Flask endpoint
     const response = await axios.post(FLASK_URL, formData, {
@@ -33,17 +33,30 @@ async function parseResume(resumeBuffer, jobDescription) {
       }
     });
 
+    // Log the response structure
+    console.log('Python service response:', JSON.stringify(response.data, null, 2));
+
     // Handle the response
     return response.data;
 
   } catch (error) {
-    console.error('Error:', error.response ? error.response.data : error.message);
+    console.error('Error in parseResume:', error.message);
+    if (error.response) {
+      // The request was made and the server responded with a status code
+      // that falls out of the range of 2xx
+      console.error('Response status:', error.response.status);
+      console.error('Response data:', error.response.data);
+    } else if (error.request) {
+      // The request was made but no response was received
+      console.error('No response received from server');
+    } else {
+      // Something happened in setting up the request that triggered an Error
+      console.error('Error setting up request:', error.message);
+    }
+    throw error;
   }
 }
 
 module.exports = {
     parseResume,       
   };
-
-// Run the function
-parseResume();
