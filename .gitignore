@@ -1,7 +1,25 @@
-node_modules
-client/build/
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Node modules
+node_modules/
+
+# Build directories
+/build
+/dist
+/client/build
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
 db/dbconfig.json
 .vs
 .vscode
 .venv
 
+services/resumeSvc/__pycache__/test_ai.cpython-311-pytest-8.0.2.pyc
+services/resumeSvc/__pycache__/test_app.cpython-311-pytest-8.0.2.pyc
