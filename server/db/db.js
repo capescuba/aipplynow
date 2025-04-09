@@ -226,26 +226,42 @@ async function insertResumeAnalysis(analysisData, userId) {
         breakdown_experience,
         breakdown_education_certifications,
         breakdown_formatting,
-        improvement_suggestions_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        breakdown_keyword_optimization,
+        missing_keywords_json,
+        improvement_suggestions_critical_json,
+        improvement_suggestions_recommended_json,
+        improvement_suggestions_advanced_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     // Log the analysis data structure
     console.log('Analysis data before DB insert:', JSON.stringify(analysisData, null, 2));
 
+    // Transform skills array to include confidence and relevance scores
+    const skills = Array.isArray(analysisData.data?.skills) 
+      ? analysisData.data.skills 
+      : [];
+
+    // Transform relevant experience to new structure
+    const relevantExp = analysisData.data?.relevant_experience?.roles || [];
+
     const values = [
       userId,
       analysisData.ats_score || 0,
-      JSON.stringify(analysisData.skills || []),
-      analysisData.total_experience_years || 0,
-      JSON.stringify(analysisData.relevant_experience || []),
-      JSON.stringify(analysisData.education || []),
-      JSON.stringify(analysisData.certifications || []),
+      JSON.stringify(skills),
+      analysisData.data?.total_experience_years || 0,
+      JSON.stringify(relevantExp),
+      JSON.stringify(analysisData.data?.education || []),
+      JSON.stringify(analysisData.data?.certifications || []),
       analysisData.breakdown?.skills || 0,
       analysisData.breakdown?.experience || 0,
       analysisData.breakdown?.education_certifications || 0,
       analysisData.breakdown?.formatting || 0,
-      JSON.stringify(analysisData.improvement_suggestions || [])
+      analysisData.breakdown?.keyword_optimization || 0,
+      JSON.stringify(analysisData.data?.missing_keywords || []),
+      JSON.stringify(analysisData.improvement_suggestions?.critical || []),
+      JSON.stringify(analysisData.improvement_suggestions?.recommended || []),
+      JSON.stringify(analysisData.improvement_suggestions?.advanced || [])
     ];
 
     // Log the values being inserted
