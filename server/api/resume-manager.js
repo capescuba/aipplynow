@@ -68,7 +68,24 @@ async function getResumeFile(userId, resumeId) {
       Key: metadata.s3Key,
     });
     const response = await s3Client.send(command);
-    return response.Body;
+    
+    // Use a promise to handle the stream
+    return await new Promise((resolve, reject) => {
+      const chunks = [];
+      
+      response.Body.on('data', (chunk) => {
+        chunks.push(Buffer.from(chunk));
+      });
+
+      response.Body.on('end', () => {
+        resolve(Buffer.concat(chunks));
+      });
+
+      response.Body.on('error', (err) => {
+        console.error("Stream error:", err);
+        reject(new Error("Failed to read resume file stream"));
+      });
+    });
   } catch (error) {
     console.error("Error downloading resume:", error);
     throw error;

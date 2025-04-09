@@ -128,7 +128,7 @@ async function getResumeMetadata(resumeId, userId) {
     const query = "SELECT * FROM resumes WHERE resume_id = ? AND user_id = ?";
     console.log(`[DEBUG] DB: Executing query: ${query} with params: [${resumeId}, ${userId}]`);
     
-    const rows = await conn.query(query, [resumeId, userId]);
+    const rows = await conn.query(query, [parseInt(resumeId), userId]);
     console.log('[DEBUG] DB: Query result:', rows);
     
     if (rows.length > 0) {
@@ -208,42 +208,48 @@ async function getConfig() {
 }
 
 // Updated function without table creation
-async function insertResumeAnalysis(analysisData, userEmail = null) {
+async function insertResumeAnalysis(analysisData, userId) {
   let conn;
   try {
     conn = await pool.getConnection();
     
     const query = `
       INSERT INTO resume_analysis (
-        user_email,
+        user_id,
         ats_score,
-        skills,
+        skills_json,
         total_experience_years,
-        relevant_experience,
-        education,
-        certifications,
+        relevant_experience_json,
+        education_json,
+        certifications_json,
         breakdown_skills,
         breakdown_experience,
-        breakdown_edu_certs,
+        breakdown_education_certifications,
         breakdown_formatting,
-        suggestions
+        improvement_suggestions_json
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
+    // Log the analysis data structure
+    console.log('Analysis data before DB insert:', JSON.stringify(analysisData, null, 2));
+
     const values = [
-      userEmail,
-      analysisData.ats_score,
-      JSON.stringify(analysisData.data.skills),
-      analysisData.data.total_experience_years,
-      JSON.stringify(analysisData.data.relevant_experience),
-      JSON.stringify(analysisData.data.education),
-      JSON.stringify(analysisData.data.certifications),
-      analysisData.breakdown.skills,
-      analysisData.breakdown.experience,
-      analysisData.breakdown.education_certifications,
-      analysisData.breakdown.formatting,
-      JSON.stringify(analysisData.improvement_suggestions)
+      userId,
+      analysisData.ats_score || 0,
+      JSON.stringify(analysisData.skills || []),
+      analysisData.total_experience_years || 0,
+      JSON.stringify(analysisData.relevant_experience || []),
+      JSON.stringify(analysisData.education || []),
+      JSON.stringify(analysisData.certifications || []),
+      analysisData.breakdown?.skills || 0,
+      analysisData.breakdown?.experience || 0,
+      analysisData.breakdown?.education_certifications || 0,
+      analysisData.breakdown?.formatting || 0,
+      JSON.stringify(analysisData.improvement_suggestions || [])
     ];
+
+    // Log the values being inserted
+    console.log('Values being inserted:', values);
 
     const result = await conn.query(query, values);
     console.log("Resume analysis stored successfully with ID:", result.insertId);

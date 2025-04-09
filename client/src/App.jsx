@@ -1,5 +1,5 @@
 // App.jsx
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import {
   BrowserRouter as Router,
   Route,
@@ -95,7 +95,7 @@ function App({ currentTheme, toggleTheme }) {
   });
   const navigate = useNavigate();
 
-  const handleLogin = (code, userInfo, isLoggedIn) => {
+  const handleLogin = useCallback((code, userInfo, isLoggedIn) => {
     console.log("Received code:", code);
     if (userInfo && isLoggedIn) {
       setAuthState({ isLoggedIn: true, userInfo });
@@ -103,7 +103,7 @@ function App({ currentTheme, toggleTheme }) {
       Session.setSessionStorageWithTimeout("isLoggedIn", "true", SESSION_TIMEOUT);
     }
     navigate("/");
-  };
+  }, [navigate]);
 
   const handleLogout = async () => {
     try {

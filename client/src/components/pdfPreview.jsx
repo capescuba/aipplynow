@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Box, Typography, CircularProgress, Paper } from '@mui/material';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Box, Typography, CircularProgress } from '@mui/material';
 import { Document, Page, pdfjs } from 'react-pdf';
-import { useTheme } from '@mui/material/styles';
 import PDFToolbar from './pdfToolbar';
 import ResumeParser from './resumeParser';
 import { tintPdfBackground } from '../libs/pdfUtils';
@@ -17,6 +16,8 @@ function PDFPreview({ file: initialFile, resumeId, onSaveSuccess }) {
   const [scale, setScale] = useState(1.0);
   const [containerWidth, setContainerWidth] = useState(null);
   const containerRef = useRef(null);
+  const resizeTimeoutRef = useRef(null);
+  const initialScaleRef = useRef(null);
   const MIN_SCALE = 0.25; // Minimum zoom level
   const MAX_SCALE = 5.0;  // Maximum zoom level
   const SCALE_STEP = 0.1; // More granular step size for smoother zooming
@@ -25,22 +26,54 @@ function PDFPreview({ file: initialFile, resumeId, onSaveSuccess }) {
   const [jobDesc, setJobDesc] = useState('');
   const [url, setUrl] = useState('');
   const [scoreData, setScoreData] = useState(null);
-  const theme = useTheme();
+  const [currentResumeId, setCurrentResumeId] = useState(resumeId);
 
-  // Add resize observer to track container width
+  // Modify the resize observer to be more stable and only update width on significant changes
   useEffect(() => {
     if (!containerRef.current) return;
 
     const resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        const newWidth = entry.contentRect.width;
-        setContainerWidth(newWidth);
+        const newWidth = Math.round(entry.contentRect.width);
+        
+        // Only update if the width change is significant (more than 20px)
+        if (Math.abs(newWidth - (containerWidth || 0)) > 20) {
+          // Clear any existing timeout
+          if (resizeTimeoutRef.current) {
+            clearTimeout(resizeTimeoutRef.current);
+          }
+          
+          // Set a new timeout to update the width after a delay
+          resizeTimeoutRef.current = setTimeout(() => {
+            setContainerWidth(newWidth);
+          }, 250);
+        }
       }
     });
 
     resizeObserver.observe(containerRef.current);
-    return () => resizeObserver.disconnect();
-  }, []);
+    return () => {
+      resizeObserver.disconnect();
+      if (resizeTimeoutRef.current) {
+        clearTimeout(resizeTimeoutRef.current);
+      }
+    };
+  }, [containerWidth]);
+
+  // Calculate initial scale only once when PDF is first loaded
+  useEffect(() => {
+    if (!containerWidth || !file || initialScaleRef.current) return;
+    
+    // Base width is for a typical resume page (8.5" x 11" at 96 DPI)
+    const baseWidth = 816; // 8.5 inches * 96 DPI
+    const availableWidth = containerWidth - 24;
+    const idealScale = (availableWidth / baseWidth) * 1.8;
+    
+    // Clamp the scale between MIN_SCALE and MAX_SCALE
+    const newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, idealScale));
+    setScale(newScale);
+    initialScaleRef.current = newScale; // Store the initial scale
+  }, [containerWidth, file]);
 
   // Listen for job description from Chrome extension
   useEffect(() => {
@@ -87,163 +120,116 @@ function PDFPreview({ file: initialFile, resumeId, onSaveSuccess }) {
     };
   }, []); // Empty dependency array since we only want to set this up once
 
-  // Auto-adjust scale based on container width
+  // Update file when initialFile changes
   useEffect(() => {
-    if (!containerWidth) return;
-    
-    // Base width is for a typical resume page (8.5" x 11" at 96 DPI)
-    const baseWidth = 816; // 8.5 inches * 96 DPI
-    const availableWidth = containerWidth - 48; // Account for padding
-    const idealScale = availableWidth / baseWidth;
-    
-    // Clamp the scale between MIN_SCALE and MAX_SCALE
-    const newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, idealScale));
-    setScale(newScale);
-  }, [containerWidth]);
-
-  useEffect(() => {
-    console.log('PDFPreview - initialFile changed:', initialFile);
-    
     if (initialFile) {
-      console.log('PDFPreview - Processing file:', initialFile.name, initialFile.type);
-      setLoading(true);
       setOriginalFile(initialFile);
-      
-      // First try to use the file directly without tinting
-      setLocalFile(initialFile);
-      console.log('PDFPreview - Set local file to initial file');
-      
-      // Then attempt to tint it in the background
-      tintPdfBackground(initialFile)
-        .then((tintedFile) => {
-          console.log('PDFPreview - PDF tinted successfully');
-          setLocalFile(tintedFile);
-        })
-        .catch((error) => {
-          console.error('PDFPreview - Error tinting PDF:', error);
-          // Keep using the original file if tinting fails
-          setLocalFile(initialFile);
-        })
-        .finally(() => {
-          setLoading(false);
-        });
-    } else {
-      console.log('PDFPreview - No initial file provided');
-      setLocalFile(null);
-      setOriginalFile(null);
-      setNumPages(null);
-      setPageNumber(1);
-      setScale(1.0);
-      setLoading(false);
-      setScoreData(null);
-      setUploadStatus(null);
+      tintPdfBackground(initialFile).then((tintedFile) => {
+        setLocalFile(tintedFile);
+        // Reset the initial scale ref when loading a new file
+        initialScaleRef.current = null;
+      });
     }
   }, [initialFile]);
 
-  const onDocumentLoadSuccess = ({ numPages }) => {
-    console.log('PDFPreview - Document loaded successfully with', numPages, 'pages');
+  // Update currentResumeId when resumeId prop changes
+  useEffect(() => {
+    setCurrentResumeId(resumeId);
+  }, [resumeId]);
+
+  const onDocumentLoadSuccess = useCallback(({ numPages }) => {
     setNumPages(numPages);
-    setLoading(false);
-  };
+    setPageNumber(1);
+  }, []);
 
-  const onDocumentLoadError = (error) => {
-    console.error('PDFPreview - Error loading document:', error);
-    setUploadStatus(`Error loading PDF: ${error.message}`);
-    setLoading(false);
-  };
+  const handleZoomIn = useCallback(() => {
+    setScale((prevScale) => Math.min(prevScale + SCALE_STEP, MAX_SCALE));
+  }, []);
 
-  const handlePrevPage = () => {
-    if (pageNumber > 1) {
-      setPageNumber(pageNumber - 1);
-    }
-  };
+  const handleZoomOut = useCallback(() => {
+    setScale((prevScale) => Math.max(prevScale - SCALE_STEP, MIN_SCALE));
+  }, []);
 
-  const handleNextPage = () => {
-    if (pageNumber < numPages) {
-      setPageNumber(pageNumber + 1);
-    }
-  };
+  const handleResetZoom = useCallback(() => {
+    if (!containerWidth || !initialScaleRef.current) return;
+    setScale(initialScaleRef.current);
+  }, [containerWidth]);
 
-  const handleZoomIn = () => {
-    if (scale < MAX_SCALE) {
-      setScale(Math.min(MAX_SCALE, scale + SCALE_STEP));
-    }
-  };
+  const handlePrevPage = useCallback(() => {
+    setPageNumber((prev) => Math.max(1, prev - 1));
+  }, []);
 
-  const handleZoomOut = () => {
-    if (scale > MIN_SCALE) {
-      setScale(Math.max(MIN_SCALE, scale - SCALE_STEP));
-    }
-  };
-
-  const handleResetZoom = () => {
-    setScale(1.0);
-  };
-
-  const handleWheel = (event) => {
-    if (event.ctrlKey || event.metaKey) {
-      event.preventDefault();
-      const delta = -Math.sign(event.deltaY) * SCALE_STEP;
-      const newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, scale + delta));
-      setScale(newScale);
-    }
-  };
-
-  const handleFileChange = async (event) => {
-    const file = event.target.files[0];
-    if (file) {
-      setLocalFile(file);
-      setOriginalFile(file);
-      setNumPages(null);
-      setPageNumber(1);
-      setScale(1.0);
-    }
-  };
-
-  const handleJobDescChange = (event) => {
-    setJobDesc(event.target.value);
-  };
-
-  const handleUrlChange = (event) => {
-    setUrl(event.target.value);
-  };
+  const handleNextPage = useCallback(() => {
+    setPageNumber((prev) => Math.min(numPages || prev, prev + 1));
+  }, [numPages]);
 
   const handleAnalyze = async () => {
     if (!originalFile) {
-      setUploadStatus('Please select a PDF file first.');
-      return;
-    }
-
-    if (!jobDesc && !url) {
-      setUploadStatus('Please provide a job description or URL.');
+      setUploadStatus('Please select a resume file first');
       return;
     }
 
     setLoading(true);
     setUploadStatus('Analyzing resume...');
-    setScoreData(null);
 
     try {
-      const formData = new FormData();
-      formData.append('resume', originalFile);
-      if (jobDesc) formData.append('jobDescription', jobDesc);
-      if (url) formData.append('jobUrl', url);
-
-      const response = await fetch('/api/analyze', {
+      // Use the resumeId prop if available
+      let resumeIdToUse = currentResumeId;
+      
+      // If we don't have a resumeId, we need to upload the resume first
+      if (!resumeIdToUse) {
+        const formData = new FormData();
+        formData.append('resume', originalFile);
+        
+        const uploadResponse = await fetch('/api/users/me/resumes', {
+          method: 'POST',
+          body: formData,
+        });
+        
+        if (!uploadResponse.ok) {
+          throw new Error(`Upload failed: ${uploadResponse.statusText}`);
+        }
+        
+        const uploadData = await uploadResponse.json();
+        resumeIdToUse = uploadData.resume_id;
+        // Update the resumeId state
+        setCurrentResumeId(resumeIdToUse);
+      }
+      
+      // Now analyze the resume with the job description
+      const analyzeResponse = await fetch(`/api/users/me/resumes/${resumeIdToUse}/parse`, {
         method: 'POST',
-        body: formData,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          job_description: jobDesc || `Job from ${url}`
+        }),
       });
 
-      if (!response.ok) {
-        throw new Error(`Analysis failed: ${response.statusText}`);
+      if (!analyzeResponse.ok) {
+        const errorData = await analyzeResponse.json();
+        throw new Error(errorData.error || `Analysis failed: ${analyzeResponse.statusText}`);
       }
 
-      const data = await response.json();
+      const data = await analyzeResponse.json();
+      if (data.error) {
+        throw new Error(data.error);
+      }
+      
+      // Set the score data directly from the response
       setScoreData(data);
       setUploadStatus('Analysis complete!');
+      
+      // Call onSaveSuccess if provided
+      if (onSaveSuccess) {
+        onSaveSuccess(data);
+      }
     } catch (error) {
       console.error('Analysis error:', error);
       setUploadStatus(`Analysis failed: ${error.message}`);
+      setScoreData(null);
     } finally {
       setLoading(false);
     }
@@ -257,13 +243,12 @@ function PDFPreview({ file: initialFile, resumeId, onSaveSuccess }) {
         height: '100%',
         width: '100%',
         overflow: 'hidden',
-        bgcolor: theme.palette.background.default,
+        bgcolor: 'background.default',
         gap: 2,
         boxSizing: 'border-box',
       }}
     >
       <Box
-        ref={containerRef}
         sx={{
           display: 'flex',
           flexDirection: 'column',
@@ -274,122 +259,92 @@ function PDFPreview({ file: initialFile, resumeId, onSaveSuccess }) {
           boxSizing: 'border-box',
         }}
       >
-        <Paper
-          elevation={3}
+        <PDFToolbar
+          currentPage={pageNumber}
+          numPages={numPages}
+          onPrevPage={handlePrevPage}
+          onNextPage={handleNextPage}
+          onZoomIn={handleZoomIn}
+          onZoomOut={handleZoomOut}
+          onResetZoom={handleResetZoom}
+          zoomLevel={scale}
+        />
+        <Box
+          ref={containerRef}
           sx={{
-            height: '100%',
+            flexGrow: 1,
+            overflow: 'auto',
             display: 'flex',
-            flexDirection: 'column',
-            bgcolor: theme.palette.background.paper,
-            borderRadius: 2,
-            overflow: 'hidden',
+            justifyContent: 'center',
+            alignItems: 'flex-start',
+            p: 1,
+            bgcolor: 'background.paper',
           }}
         >
-          {file && (
-            <PDFToolbar
-              currentPage={pageNumber}
-              numPages={numPages}
-              onPrevPage={handlePrevPage}
-              onNextPage={handleNextPage}
-              onZoomIn={handleZoomIn}
-              onZoomOut={handleZoomOut}
-              onResetZoom={handleResetZoom}
-              zoomLevel={scale}
-            />
+          {loading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+              <CircularProgress />
+            </Box>
+          ) : file ? (
+            <Document
+              file={file}
+              onLoadSuccess={onDocumentLoadSuccess}
+              loading={
+                <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+                  <CircularProgress />
+                </Box>
+              }
+            >
+              <Page
+                pageNumber={pageNumber}
+                scale={scale}
+                width={containerWidth ? containerWidth * 0.95 : undefined}
+                renderTextLayer={false}
+                renderAnnotationLayer={false}
+              />
+            </Document>
+          ) : (
+            <Typography variant="body1" color="text.secondary">
+              No PDF file selected
+            </Typography>
           )}
-          <Box
-            sx={{
-              flexGrow: 1,
-              overflow: 'auto',
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'flex-start',
-              boxSizing: 'border-box',
-              p: 3,
-            }}
-            onWheel={handleWheel}
-          >
-            {loading ? (
-              <Box
-                sx={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  height: '100%',
-                }}
-              >
-                <CircularProgress />
-                <Typography sx={{ mt: 2, color: theme.palette.text.primary }}>
-                  Loading PDF...
-                </Typography>
-              </Box>
-            ) : file ? (
-              <Document
-                file={file}
-                onLoadSuccess={onDocumentLoadSuccess}
-                onLoadError={onDocumentLoadError}
-                loading={
-                  <Box
-                    sx={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      height: '100%',
-                    }}
-                  >
-                    <CircularProgress />
-                    <Typography sx={{ mt: 2, color: theme.palette.text.primary }}>
-                      Loading PDF...
-                    </Typography>
-                  </Box>
-                }
-                error={
-                  <Typography sx={{ color: theme.palette.error.main }}>
-                    Error loading PDF. Please try again.
-                  </Typography>
-                }
-              >
-                <Page
-                  pageNumber={pageNumber}
-                  scale={scale}
-                  renderTextLayer={false}
-                  renderAnnotationLayer={false}
-                />
-              </Document>
-            ) : (
-              <Typography sx={{ color: theme.palette.text.secondary }}>
-                No PDF selected. Please select a resume from the sidebar.
-              </Typography>
-            )}
-          </Box>
-        </Paper>
+        </Box>
       </Box>
 
       <Box
         sx={{
           flex: { xs: '1 1 auto', md: '1 1 40%' },
           height: { xs: '50vh', md: '100%' },
-          overflow: 'auto',
+          overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
           minWidth: 0,
+          maxWidth: { md: '40%' },
           boxSizing: 'border-box',
+          position: 'relative',
         }}
       >
-        {file && (
+        <Box
+          sx={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            overflow: 'auto',
+          }}
+        >
           <ResumeParser
-            file={originalFile}
             jobDesc={jobDesc}
             setJobDesc={setJobDesc}
+            url={url}
+            onAnalyze={handleAnalyze}
             loading={loading}
-            currentResumeId={resumeId}
             uploadStatus={uploadStatus}
             scoreData={scoreData}
-            onParse={handleAnalyze}
+            currentResumeId={currentResumeId}
           />
-        )}
+        </Box>
       </Box>
     </Box>
   );
