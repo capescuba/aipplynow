@@ -48,6 +48,24 @@ COMMON_TECH_SKILLS = {
     "soft_skills": {"communication", "problem-solving", "leadership", "teamwork"}
 }
 
+# Job levels and their associated keywords
+JOB_LEVELS = {
+    "entry": {"junior", "entry", "entry-level", "graduate", "associate"},
+    "mid": {"mid-level", "intermediate", "experienced"},
+    "senior": {"senior", "lead", "principal", "staff", "architect"},
+    "management": {"manager", "director", "head", "vp", "chief"}
+}
+
+# Technical domains and their associated keywords
+TECH_DOMAINS = {
+    "frontend": {"frontend", "front-end", "ui", "ux", "react", "angular", "vue", "javascript", "typescript", "css", "html"},
+    "backend": {"backend", "back-end", "api", "server", "database", "python", "java", "node.js", "golang"},
+    "fullstack": {"fullstack", "full-stack", "full stack", "frontend", "backend"},
+    "devops": {"devops", "cloud", "aws", "azure", "kubernetes", "docker", "ci/cd"},
+    "data": {"data engineer", "data scientist", "machine learning", "ai", "analytics", "big data"},
+    "security": {"security", "cybersecurity", "information security", "security engineer"}
+}
+
 def extract_text_from_pdf(pdf_file):
     """Extract and clean text from a PDF resume."""
     try:
@@ -266,6 +284,92 @@ def weighted_score_no_ai(resume_text, job_desc_text, pdf_file):
         logger.error(f"No-AI scoring failed: {str(e)}")
         raise ValueError(f"Scoring error: {str(e)}")
 
+def extract_job_level(job_desc):
+    """Extract job level from job description."""
+    job_desc_lower = job_desc.lower()
+    for level, keywords in JOB_LEVELS.items():
+        if any(keyword in job_desc_lower for keyword in keywords):
+            return level
+    return "mid"  # default to mid-level if no clear indicators
+
+def extract_job_domain(job_desc):
+    """Extract technical domain from job description."""
+    job_desc_lower = job_desc.lower()
+    domain_scores = {}
+    
+    for domain, keywords in TECH_DOMAINS.items():
+        score = sum(1 for keyword in keywords if keyword in job_desc_lower)
+        domain_scores[domain] = score
+    
+    # Return domain with highest score, or "fullstack" if no clear winner
+    max_score = max(domain_scores.values())
+    if max_score == 0:
+        return "fullstack"
+    
+    top_domains = [domain for domain, score in domain_scores.items() if score == max_score]
+    return top_domains[0]
+
+SYSTEM_PROMPT = """You are an advanced ATS optimization and career development expert with expertise in:
+1. Technical resume analysis
+2. Industry-specific keyword optimization
+3. Modern job market requirements
+4. Career progression patterns
+5. Technical skill evaluation and recommendations
+
+Your goal is to provide actionable, specific feedback that will help candidates improve their resumes for both ATS systems and human reviewers."""
+
+BASE_PROMPT = """
+Analyze the provided resume and job description with the following objectives:
+
+1. Technical Skill Analysis:
+   - Identify core technical competencies
+   - Evaluate skill relevance to the job description
+   - Suggest emerging technologies that could enhance the profile
+
+2. Experience Evaluation:
+   - Assess experience depth and relevance
+   - Identify gaps between experience and job requirements
+   - Suggest ways to better present existing experience
+
+3. Achievement Impact:
+   - Evaluate how achievements are presented
+   - Suggest metrics or quantifiable results to add
+   - Recommend ways to better demonstrate impact
+
+4. ATS Optimization:
+   - Score keyword matching and placement
+   - Evaluate format compatibility
+   - Suggest structural improvements
+
+Return a JSON object with:
+{
+  "data": {
+    "skills": [{"name": string, "confidence": number, "relevance": number}],
+    "total_experience_years": number,
+    "relevant_experience": {
+      "roles": [{"title": string, "years": number, "relevance_score": number}],
+      "improvement_areas": [string]
+    },
+    "education": [string],
+    "certifications": [string],
+    "missing_keywords": [string]
+  },
+  "ats_score": "XX.XX%",
+  "breakdown": {
+    "skills": number,
+    "experience": number,
+    "education_certifications": number,
+    "formatting": number,
+    "keyword_optimization": number
+  },
+  "improvement_suggestions": {
+    "critical": [string],
+    "recommended": [string],
+    "advanced": [string]
+  }
+}
+"""
+
 def analyze_with_ai(resume_text, job_desc, local_data, formatting_penalty):
     """Use xAI to refine data, score, and suggest improvements."""
     # Input validation
@@ -273,45 +377,43 @@ def analyze_with_ai(resume_text, job_desc, local_data, formatting_penalty):
         logger.error("Empty resume text or job description provided")
         return None
         
-    base_prompt = """
-You are an ATS optimization expert. Analyze the resume text and job description below, refine the resume data, score ATS compatibility (0-100%), and provide 3-5 specific suggestions. Return *only* a JSON object with the following structure, with no additional text, comments, or markdown outside the JSON:
+    # Extract job context
+    job_level = extract_job_level(job_desc)
+    job_domain = extract_job_domain(job_desc)
+    
+    context_prompt = f"""
+    Job Context:
+    - Level: {job_level}
+    - Domain: {job_domain}
+    - Industry Trends: Consider current market demands in {job_domain}
+    - Career Level Expectations: Focus on expectations for {job_level} positions
+    """
+    
+    full_prompt = BASE_PROMPT + context_prompt + "\n\n" + f"""
+    **Resume Text:**
+    {resume_text}
 
-{
-  "data": {
-    "skills": [list of strings],
-    "total_experience_years": number,
-    "relevant_experience": {"role": years},
-    "education": [list of strings],
-    "certifications": [list of strings]
-  },
-  "ats_score": "XX.XX%",
-  "breakdown": {
-    "skills": number,
-    "experience": number,
-    "education_certifications": number,
-    "formatting": number
-  },
-  "improvement_suggestions": [list of strings]
-}
-"""
-    prompt = (
-        base_prompt +
-        "**Resume Text:**\n" + resume_text + "\n\n" +
-        "**Job Description:**\n" + job_desc + "\n\n" +
-        "**Locally Extracted Data:**\n" + str(local_data) + "\n\n" +
-        "**Formatting Penalty:**\n" + str(formatting_penalty)
-    )
+    **Job Description:**
+    {job_desc}
+
+    **Local Analysis Results:**
+    {json.dumps(local_data, indent=2)}
+
+    **Formatting Analysis:**
+    Penalty Score: {formatting_penalty}
+    """
 
     try:
         logger.info("Calling xAI API")
         completion = client.chat.completions.create(
             model="grok-2-latest",
             messages=[
-                {"role": "system", "content": "You are an ATS optimization expert."},
-                {"role": "user", "content": prompt}
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": full_prompt}
             ],
             max_tokens=2000
         )
+        
         response_text = completion.choices[0].message.content
         logger.info(f"xAI response: {response_text}")
 
@@ -338,17 +440,21 @@ You are an ATS optimization expert. Analyze the resume text and job description 
         
         # Ensure required fields are present with defaults
         ai_result.setdefault("breakdown", {
-            "skills": 0, "experience": 0, "education_certifications": 0, "formatting": 0
+            "skills": 0,
+            "experience": 0,
+            "education_certifications": 0,
+            "formatting": 0,
+            "keyword_optimization": 0
         })
-        ai_result.setdefault("improvement_suggestions", ai_result.pop("suggestions", []))
         
-        # Normalize breakdown scores to match total score
-        score_value = float(ai_result["ats_score"].replace("%", ""))
-        breakdown = ai_result["breakdown"]
-        total_breakdown = sum(breakdown.values())
-        if total_breakdown > 0:
-            for key in breakdown:
-                breakdown[key] = (breakdown[key] / total_breakdown) * score_value
+        # Convert old format suggestions to new format if needed
+        if isinstance(ai_result.get("improvement_suggestions"), list):
+            suggestions = ai_result["improvement_suggestions"]
+            ai_result["improvement_suggestions"] = {
+                "critical": suggestions[:2] if suggestions else [],
+                "recommended": suggestions[2:4] if len(suggestions) > 2 else [],
+                "advanced": suggestions[4:] if len(suggestions) > 4 else []
+            }
         
         return ai_result
 
@@ -402,7 +508,7 @@ def parse_and_rank():
             result = analyze_with_ai(resume_text, job_desc, local_data, formatting_penalty)
             if result and "data" in result:
                 result.setdefault("breakdown", {
-                    "skills": 0, "experience": 0, "education_certifications": 0, "formatting": 0
+                    "skills": 0, "experience": 0, "education_certifications": 0, "formatting": 0, "keyword_optimization": 0
                 })
                 result.setdefault("improvement_suggestions", result.pop("suggestions", []))
             else:
