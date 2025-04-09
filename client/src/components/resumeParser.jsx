@@ -105,76 +105,87 @@ function ResumeParser({
               Score Breakdown
             </Typography>
             <List dense>
-              {Object.entries(scoreData.breakdown || {}).map(([key, value]) => (
+              {scoreData.breakdown && Object.entries(scoreData.breakdown).map(([key, value]) => (
                 <ListItem key={key}>
                   <ListItemText
-                    primary={`${key.charAt(0).toUpperCase() + key.slice(1).replace(/_/g, ' ')}`}
-                    secondary={`${(value * 100).toFixed(1)}%`}
+                    primary={`${key.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}`}
+                    secondary={`${value}%`}
                   />
                 </ListItem>
               ))}
             </List>
 
             <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>
-              Improvement Suggestions
+              ATS Score
             </Typography>
-            <List dense>
-              {(scoreData.improvement_suggestions || []).map((suggestion, index) => (
-                <ListItem key={index}>
-                  <ListItemText
-                    primary={suggestion}
-                    sx={{
-                      '& .MuiListItemText-primary': {
-                        color: theme.palette.text.secondary,
-                        fontSize: '0.9rem',
-                      },
-                    }}
-                  />
-                </ListItem>
-              ))}
-            </List>
+            <Typography variant="body1" color="primary" gutterBottom>
+              {scoreData.ats_score}%
+            </Typography>
 
-            {scoreData && (
+            {scoreData.improvement_suggestions && scoreData.improvement_suggestions.length > 0 && (
               <>
                 <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>
-                  Resume Data
+                  Improvement Suggestions
                 </Typography>
                 <List dense>
-                  <ListItem>
-                    <ListItemText
-                      primary="Skills"
-                      secondary={(scoreData.skills || []).join(', ')}
-                    />
-                  </ListItem>
-                  <ListItem>
-                    <ListItemText
-                      primary="Total Experience"
-                      secondary={`${scoreData.total_experience_years || 0} years`}
-                    />
-                  </ListItem>
-                  <ListItem>
-                    <ListItemText
-                      primary="Relevant Experience"
-                      secondary={Object.entries(scoreData.relevant_experience || {})
-                        .map(([role, years]) => `${role}: ${years} years`)
-                        .join(', ')}
-                    />
-                  </ListItem>
-                  <ListItem>
-                    <ListItemText
-                      primary="Education"
-                      secondary={(scoreData.education || []).length > 0 ? scoreData.education.join(', ') : 'None'}
-                    />
-                  </ListItem>
-                  <ListItem>
-                    <ListItemText
-                      primary="Certifications"
-                      secondary={(scoreData.certifications || []).length > 0 ? scoreData.certifications.join(', ') : 'None'}
-                    />
-                  </ListItem>
+                  {scoreData.improvement_suggestions.map((suggestion, index) => (
+                    <ListItem key={index}>
+                      <ListItemText
+                        primary={suggestion}
+                        sx={{
+                          '& .MuiListItemText-primary': {
+                            color: theme.palette.text.secondary,
+                            fontSize: '0.9rem',
+                          },
+                        }}
+                      />
+                    </ListItem>
+                  ))}
                 </List>
               </>
             )}
+
+            <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>
+              Resume Data
+            </Typography>
+            <List dense>
+              <ListItem>
+                <ListItemText
+                  primary="Skills"
+                  secondary={scoreData.data?.skills && scoreData.data.skills.length > 0 ? scoreData.data.skills.join(', ') : 'None'}
+                />
+              </ListItem>
+              <ListItem>
+                <ListItemText
+                  primary="Total Experience"
+                  secondary={`${scoreData.data?.total_experience_years || 0} years`}
+                />
+              </ListItem>
+              <ListItem>
+                <ListItemText
+                  primary="Relevant Experience"
+                  secondary={
+                    scoreData.data?.relevant_experience && Object.keys(scoreData.data.relevant_experience).length > 0
+                      ? Object.entries(scoreData.data.relevant_experience)
+                          .map(([role, years]) => `${role}: ${years} years`)
+                          .join(', ')
+                      : 'None'
+                  }
+                />
+              </ListItem>
+              <ListItem>
+                <ListItemText
+                  primary="Education"
+                  secondary={scoreData.data?.education && scoreData.data.education.length > 0 ? scoreData.data.education.join(', ') : 'None'}
+                />
+              </ListItem>
+              <ListItem>
+                <ListItemText
+                  primary="Certifications"
+                  secondary={scoreData.data?.certifications && scoreData.data.certifications.length > 0 ? scoreData.data.certifications.join(', ') : 'None'}
+                />
+              </ListItem>
+            </List>
           </>
         )}
       </Stack>

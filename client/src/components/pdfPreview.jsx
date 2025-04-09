@@ -214,12 +214,15 @@ function PDFPreview({ file: initialFile, resumeId, onSaveSuccess }) {
       }
 
       const data = await analyzeResponse.json();
+      console.log('Analysis response:', JSON.stringify(data, null, 2)); // More detailed logging
+      
       if (data.error) {
         throw new Error(data.error);
       }
       
       // Set the score data directly from the response
       setScoreData(data);
+      console.log('Setting score data:', JSON.stringify(data, null, 2)); // Log what we're setting
       setUploadStatus('Analysis complete!');
       
       // Call onSaveSuccess if provided
