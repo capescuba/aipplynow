@@ -20,6 +20,7 @@ import {
   AccountCircle,
   Login as LoginIcon,
   Logout as LogoutIcon,
+  Help as HelpIcon,
 } from "@mui/icons-material";
 import { spacing } from "../themes";
 
@@ -97,6 +98,22 @@ function Header({
             transition: 'all 0.2s ease-in-out'
           }
         }}>
+          <Tooltip title="Help">
+            <Button
+              color="inherit"
+              href="/help"
+              startIcon={<HelpIcon />}
+              sx={{
+                textTransform: "none",
+                "&:hover": {
+                  backgroundColor: "rgba(255, 255, 255, 0.1)",
+                },
+              }}
+            >
+              {isMobile ? "" : "Help"}
+            </Button>
+          </Tooltip>
+
           <Tooltip title={`Switch to ${currentTheme === "matrix" ? "modern" : "matrix"} theme`}>
             <IconButton
               onClick={toggleTheme}
