@@ -6,13 +6,14 @@ import {
   Button,
   Paper,
   IconButton,
+  TextField,
+  Stack,
 } from "@mui/material";
 import { useTheme } from '@mui/material/styles';
 import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
 import Header from "./header";
 import PDFPreview from "./pdfPreview";
-import ResumeMetadata from "./resumeMetadata";
 import {
   LoadingState,
   Toast,
@@ -53,6 +54,7 @@ function Home({
   const [isLoading, setIsLoading] = useState(false);
   const [toast, setToast] = useState({ open: false, message: "", severity: "success" });
   const [isResumesExpanded, setIsResumesExpanded] = useState(true);
+  const [nameError, setNameError] = useState("");
 
   useEffect(() => {
     if (isLoggedIn) {
@@ -94,7 +96,7 @@ function Home({
       });
       if (!response.ok) throw new Error(`Failed to fetch resume file: ${response.statusText}`);
       const blob = await response.blob();
-      const file = new File([blob], resumes.find((r) => r.resume_id === resumeId).original_name, {
+      const file = new File([blob], resumes.find((r) => r.resume_id === resumeId).name, {
         type: "application/pdf",
       });
       return file;
@@ -110,20 +112,40 @@ function Home({
   };
 
   const handleAddNewResume = (event) => {
-    const selectedFile = event.target.files[0];
-    if (selectedFile && selectedFile.type === "application/pdf") {
-      setSelectedFile(selectedFile);
-      setSelectedResumeId(null);
-      setNewResume({ original_name: selectedFile.name });
-      setEditingResume(null);
-      setSelectedFile(null);
-    } else {
+    console.log('[DEBUG] handleAddNewResume called');
+    const file = event.target.files[0];
+    console.log('[DEBUG] File selected:', file?.name, file?.type);
+    
+    if (!file || file.type !== "application/pdf") {
+      console.log('[DEBUG] Invalid file type:', file?.type);
       setToast({
         open: true,
         message: "Please select a valid PDF file.",
         severity: "error",
       });
+      return;
     }
+
+    // Reset all states first
+    setEditingResume(null);
+    setSelectedResumeId(null);
+    setSelectedFile(null); // Reset selected file first
+    setNewResume(null); // Reset newResume first
+    
+    // Set new states after a brief delay to ensure clean state
+    setTimeout(() => {
+      // Set the selected file and create a new resume metadata object
+      setSelectedFile(file);
+      
+      // Ensure newResume is set with initial values
+      const newResumeData = {
+        name: file.name.replace(/\.[^/.]+$/, ''),
+        description: '',
+        date_uploaded: new Date().toISOString().split('T')[0]
+      };
+      console.log('[DEBUG] Setting new resume data:', newResumeData);
+      setNewResume(newResumeData);
+    }, 0);
   };
 
   const handleResumeSelect = async (resumeId) => {
@@ -189,38 +211,67 @@ function Home({
 
   const handleSaveMetadata = async (updatedMetadata) => {
     try {
-      if (newResume) {
+      if (newResume && selectedFile) {
+        console.log('[DEBUG] Uploading new resume with metadata:', updatedMetadata);
         const formData = new FormData();
         formData.append("resume", selectedFile);
-        formData.append("original_name", updatedMetadata.name);
-        formData.append("description", updatedMetadata.description);
+        formData.append("name", updatedMetadata.name);
+        formData.append("description", updatedMetadata.description || '');
 
+        console.log('[DEBUG] Sending upload request');
         const response = await fetch("/api/users/me/resumes", {
           method: "POST",
           credentials: "include",
           body: formData,
         });
-        if (!response.ok) throw new Error(`Failed to save new resume: ${response.statusText}`);
+
+        console.log('[DEBUG] Response status:', response.status);
+        if (!response.ok) {
+          const errorData = await response.json();
+          console.error('[DEBUG] Upload error response:', errorData);
+          throw new Error(errorData.error || `Failed to save new resume: ${response.statusText}`);
+        }
+
         const savedResume = await response.json();
-        setResumes((prev) => [...prev, savedResume]);
-        setSelectedResumeId(savedResume.resume_id);
+        console.log('[DEBUG] Upload successful:', savedResume);
+        
+        // Clear states in correct order
         setNewResume(null);
+        setSelectedFile(null);
+        setSelectedResumeId(savedResume.resume_id);
+        setEditingResume(null);
+        
         setToast({
           open: true,
           message: "Resume uploaded successfully!",
           severity: "success",
         });
-      } else {
+        
+        // Fetch updated resume list
+        await fetchResumes();
+        
+        // Reset file input
+        const fileInput = document.querySelector('input[type="file"]');
+        if (fileInput) {
+          fileInput.value = '';
+        }
+      } else if (updatedMetadata.resume_id) {
+        console.log('[DEBUG] Updating existing resume metadata:', updatedMetadata);
         const response = await fetch(`/api/users/me/resumes/${updatedMetadata.resume_id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
           body: JSON.stringify({
-            original_name: updatedMetadata.name,
+            name: updatedMetadata.name,
             description: updatedMetadata.description,
           }),
         });
-        if (!response.ok) throw new Error(`Failed to update metadata: ${response.statusText}`);
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || `Failed to update metadata: ${response.statusText}`);
+        }
+
         setResumes((prev) =>
           prev.map((r) =>
             r.resume_id === updatedMetadata.resume_id ? { ...r, ...updatedMetadata } : r
@@ -232,13 +283,12 @@ function Home({
           severity: "success",
         });
       }
-      setEditingResume(null);
       fetchResumes();
     } catch (error) {
-      console.error("Error saving metadata:", error);
+      console.error('[DEBUG] Error saving metadata:', error);
       setToast({
         open: true,
-        message: "Failed to save resume. Please try again.",
+        message: error.message || "Failed to save resume. Please try again.",
         severity: "error",
       });
     }
@@ -250,6 +300,25 @@ function Home({
 
   const handleCloseToast = () => {
     setToast({ ...toast, open: false });
+  };
+
+  const validateName = (name, currentResumeId = null) => {
+    if (!name) {
+      setNameError("Name is required");
+      return false;
+    }
+    
+    const duplicate = resumes.find(
+      r => r.name.toLowerCase() === name.toLowerCase() && r.resume_id !== currentResumeId
+    );
+    
+    if (duplicate) {
+      setNameError("A resume with this name already exists");
+      return false;
+    }
+    
+    setNameError("");
+    return true;
   };
 
   return (
@@ -321,6 +390,20 @@ function Home({
                   <Typography variant="h6" component="h1" noWrap>
                     My Resumes
                   </Typography>
+                  <Typography 
+                    variant="body2" 
+                    color="text.secondary"
+                    sx={{ 
+                      ml: 1,
+                      bgcolor: 'action.selected',
+                      px: 1,
+                      py: 0.5,
+                      borderRadius: 1,
+                      fontSize: '0.75rem'
+                    }}
+                  >
+                    {resumes.length} of 5
+                  </Typography>
                 </Box>
                 <Button
                   variant="contained"
@@ -328,6 +411,7 @@ function Home({
                   color="primary"
                   size="small"
                   sx={{ textTransform: "none", minWidth: 0 }}
+                  disabled={resumes.length >= 5}
                 >
                   Upload
                   <input
@@ -360,13 +444,71 @@ function Home({
                   </TransitionComponent>
                 )}
 
-                {selectedFile && (
+                {(newResume || editingResume) && (
                   <Box sx={{ mt: 2 }}>
-                    <ResumeMetadata
-                      resume={editingResume || newResume}
-                      onSave={handleSaveMetadata}
-                      onSaveSuccess={handleSaveSuccess}
-                    />
+                    <Paper elevation={2} sx={{ p: 2 }}>
+                      <Typography variant="h6" sx={{ mb: 2 }}>
+                        {newResume ? 'New Resume' : 'Edit Resume'}
+                      </Typography>
+                      <Stack spacing={2}>
+                        <TextField
+                          fullWidth
+                          label="Name"
+                          value={newResume?.name || editingResume?.name || ''}
+                          onChange={(e) => {
+                            const newName = e.target.value;
+                            if (newResume) {
+                              setNewResume(prev => ({ ...prev, name: newName }));
+                            } else {
+                              setEditingResume(prev => ({ ...prev, name: newName }));
+                            }
+                            validateName(newName, editingResume?.resume_id);
+                          }}
+                          required
+                          error={!!nameError}
+                          helperText={nameError}
+                        />
+                        <TextField
+                          fullWidth
+                          label="Description"
+                          value={newResume?.description || editingResume?.description || ''}
+                          onChange={(e) => {
+                            if (newResume) {
+                              setNewResume(prev => ({ ...prev, description: e.target.value }));
+                            } else {
+                              setEditingResume(prev => ({ ...prev, description: e.target.value }));
+                            }
+                          }}
+                          multiline
+                          rows={3}
+                        />
+                        <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+                          <Button
+                            variant="outlined"
+                            onClick={() => {
+                              setNewResume(null);
+                              setEditingResume(null);
+                              setSelectedFile(null);
+                              setNameError("");
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            variant="contained"
+                            onClick={() => {
+                              const metadata = newResume || editingResume;
+                              if (validateName(metadata.name, editingResume?.resume_id)) {
+                                handleSaveMetadata(metadata);
+                              }
+                            }}
+                            disabled={!!nameError}
+                          >
+                            {newResume ? 'Upload' : 'Save'}
+                          </Button>
+                        </Box>
+                      </Stack>
+                    </Paper>
                   </Box>
                 )}
               </Box>

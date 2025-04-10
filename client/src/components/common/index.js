@@ -124,7 +124,7 @@ export const ResumeList = ({ resumes, onSelect, onEdit, onDelete, selectedId }) 
           <DescriptionIcon sx={{ mr: 2, color: "primary.main" }} />
           <Box>
             <Typography variant="subtitle1" component="div" sx={{ fontWeight: selectedId === resume.resume_id ? 600 : 400 }}>
-              {resume.original_name}
+              {resume.name}
             </Typography>
             {resume.description && (
               <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>

@@ -23,7 +23,9 @@ class StartupProperties {
         // Fetch data from the database
         try {
             dbProperties = await dbModule.getConfig();
-            console.log(dbProperties);
+            // Log non-sensitive properties
+            console.log('Configuration loaded successfully');
+            
             this.setProperty('CLIENT_ID', dbProperties.LinkedInClientId);
             this.setProperty('CLIENT_SECRET', dbProperties.LinkedInClientSecret);
             this.setProperty('JWT_PASSWORD', dbProperties.JwtPassword);
@@ -33,7 +35,7 @@ class StartupProperties {
             this.setProperty('AWS_REGION', dbProperties.AwsRegion);
             this.setProperty('AWS_BUCKET_NAME', dbProperties.AwsBucketName);
         } catch (err) {
-            console.error(err);
+            console.error('Error loading configuration:', err);
         }
     }
 }

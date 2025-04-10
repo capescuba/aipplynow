@@ -25,32 +25,40 @@ function getS3Client() {
 
 const BUCKET_NAME = config.getProperty('AWS_BUCKET_NAME') || "aipplynow-resumes";
 
-async function uploadResume(file, userId) {
+async function uploadResume(fileBuffer, userId, name, description = '') {
   const s3Client = getS3Client();
   try {
-    const fileExtension = file.originalname.split('.').pop();
+    console.log(`[DEBUG] Uploading resume for user ${userId} with name "${name}"`);
+    
+    const fileExtension = name.split('.').pop();
     const key = `${userId}/${uuidv4()}.${fileExtension}`;
+    console.log(`[DEBUG] Generated S3 key: ${key}`);
 
     const command = new PutObjectCommand({
       Bucket: BUCKET_NAME,
       Key: key,
-      Body: file.buffer,
-      ContentType: file.mimetype,
+      Body: fileBuffer,
+      ContentType: 'application/pdf',
     });
 
+    console.log(`[DEBUG] Uploading to S3 bucket: ${BUCKET_NAME}`);
     await s3Client.send(command);
+    console.log(`[DEBUG] Successfully uploaded to S3`);
 
-    const resumeId = await DB.saveResumeMetadata({
+    console.log(`[DEBUG] Inserting resume metadata into database`);
+    const resumeId = await DB.insertResumeMetadata({
       userId,
-      originalName: file.originalname,
+      name,
       s3Key: key,
-      fileType: file.mimetype,
-      size: file.size,
+      fileType: 'application/pdf',
+      size: fileBuffer.length,
+      description
     });
+    console.log(`[DEBUG] Successfully inserted resume metadata with ID: ${resumeId}`);
 
     return resumeId;
   } catch (error) {
-    console.error("Error uploading resume:", error);
+    console.error("[DEBUG] Error uploading resume:", error);
     throw error;
   }
 }
