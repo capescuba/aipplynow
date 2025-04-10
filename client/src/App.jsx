@@ -11,6 +11,7 @@ import { CssBaseline, ThemeProvider, Box, Typography } from "@mui/material";
 import "./App.css";
 import LinkedInCallback from "./components/linkedInCallback";
 import Home from "./components/home";
+import Help from "./components/help";
 import Session from "./libs/session";
 import { modernTheme, matrixTheme } from "./themes";
 
@@ -209,6 +210,7 @@ function App({ currentTheme, toggleTheme }) {
           }
         />
         <Route path="/callback" element={<LinkedInCallback />} />
+        <Route path="/help" element={<Help />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </Box>
