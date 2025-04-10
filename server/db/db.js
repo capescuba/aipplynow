@@ -87,31 +87,146 @@ async function getUserIdByEmail(email) {
   }
 }
 
-async function insertResumeMetadata(metadata) {
+async function getUserResumeCount(userId) {
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    const query = "SELECT COUNT(*) as count FROM resumes WHERE user_id = ?";
+    const result = await conn.query(query, [userId]);
+    return result[0].count;
+  } catch (err) {
+    console.error("Error getting user resume count:", err);
+    throw err;
+  } finally {
+    if (conn) conn.end();
+  }
+}
+
+async function checkTableStructure() {
   let conn;
   try {
     conn = await pool.getConnection();
     const query = `
+      SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLUMN_KEY, EXTRA
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'resumes'
+    `;
+    const rows = await conn.query(query, [dbconfig.database]);
+    console.log('Current table structure:', rows);
+    return rows;
+  } catch (err) {
+    console.error("Error checking table structure:", err);
+    throw err;
+  } finally {
+    if (conn) conn.end();
+  }
+}
+
+async function verifyTableStructure() {
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    const query = `
+      SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLUMN_KEY, EXTRA
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'resumes'
+      ORDER BY ORDINAL_POSITION
+    `;
+    const rows = await conn.query(query, [dbconfig.database]);
+    console.log('Resumes table structure:');
+    rows.forEach(row => {
+      console.log(`${row.COLUMN_NAME}: ${row.COLUMN_TYPE} ${row.IS_NULLABLE === 'NO' ? 'NOT NULL' : 'NULL'} ${row.COLUMN_KEY} ${row.EXTRA}`);
+    });
+    return rows;
+  } catch (err) {
+    console.error("Error verifying table structure:", err);
+    throw err;
+  } finally {
+    if (conn) conn.end();
+  }
+}
+
+async function insertResumeMetadata(metadata) {
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    
+    // Check resume count
+    const resumeCount = await getUserResumeCount(metadata.userId);
+    if (resumeCount >= 5) {
+      throw new Error("Maximum number of resumes (5) reached. Please delete an existing resume first.");
+    }
+
+    // Check if name already exists for this user
+    const existingResume = await conn.query(
+      "SELECT resume_id FROM resumes WHERE user_id = ? AND name = ?",
+      [metadata.userId, metadata.name]
+    );
+
+    if (existingResume.length > 0) {
+      throw new Error("A resume with this name already exists. Please choose a different name.");
+    }
+
+    // Verify table structure
+    await verifyTableStructure();
+
+    const query = `
       INSERT INTO resumes (
-        resume_id,
         user_id,
         s3_key,
-        original_name,
+        name,
         upload_date,
-        s3_url
-      ) VALUES (?, ?, ?, ?, ?, ?)
+        description
+      ) VALUES (?, ?, ?, NOW(), ?)
     `;
     const values = [
-      metadata.resume_id,
-      metadata.user_id,
-      metadata.s3_key,
-      metadata.original_name,
-      metadata.upload_date,
-      metadata.s3_url,
+      metadata.userId,
+      metadata.s3Key,
+      metadata.name,
+      metadata.description
+    ];
+    
+    console.log('Inserting resume with values:', values);
+    const result = await conn.query(query, values);
+    console.log('Insert result:', result);
+    return result.insertId;
+  } catch (err) {
+    console.error("Error storing resume metadata:", err);
+    throw err;
+  } finally {
+    if (conn) conn.end();
+  }
+}
+
+async function updateResumeMetadata(resumeId, userId, updates) {
+  let conn;
+  try {
+    conn = await pool.getConnection();
+
+    // Check if new name already exists for this user (excluding current resume)
+    const existingResume = await conn.query(
+      "SELECT resume_id FROM resumes WHERE user_id = ? AND name = ? AND resume_id != ?",
+      [userId, updates.name, resumeId]
+    );
+
+    if (existingResume.length > 0) {
+      throw new Error("A resume with this name already exists. Please choose a different name.");
+    }
+
+    const query = `
+      UPDATE resumes 
+      SET name = ?, description = ?
+      WHERE resume_id = ? AND user_id = ?
+    `;
+    const values = [
+      updates.name,
+      updates.description,
+      resumeId,
+      userId
     ];
     await conn.query(query, values);
   } catch (err) {
-    console.error("Error storing resume metadata:", err);
+    console.error("Error updating resume metadata:", err);
     throw err;
   } finally {
     if (conn) conn.end();
@@ -137,8 +252,7 @@ async function getResumeMetadata(resumeId, userId) {
       console.log('[DEBUG] DB: Found resume with s3_key:', resume.s3_key);
       return {
         ...resume,
-        s3Key: resume.s3_key, // Map s3_key to s3Key
-        originalName: resume.original_name,
+        s3Key: resume.s3_key,
         uploadDate: resume.upload_date,
         s3Url: resume.s3_url
       };
@@ -289,5 +403,8 @@ module.exports = {
   deleteResumeMetadata,
   addUserEmail,
   getUserIdByEmail,
-  insertResumeAnalysis
+  insertResumeAnalysis,
+  updateResumeMetadata,
+  getUserResumeCount,
+  verifyTableStructure
 };

@@ -202,20 +202,47 @@ async function defineRoutes() {
 
   app.post("/api/users/me/resumes", decodeJWT, upload.single("resume"), async (req, res) => {
     try {
-      const originalFileName = req.file.originalname;
       const userId = await DB.getUserIdByEmail(req.user.email);
       if (!userId) throw new Error("User not found");
+
+      // Check resume count before uploading to S3
+      const resumeCount = await DB.getUserResumeCount(userId);
+      if (resumeCount >= 5) {
+        return res.status(400).json({
+          error: "Resume limit reached",
+          message: "Maximum number of resumes (5) reached. Please delete an existing resume first."
+        });
+      }
 
       const resumeId = await resumeModule.uploadResume(
         req.file.buffer,
         userId,
-        originalFileName
+        req.body.name,  // Use name from the form data
+        req.body.description
       );
 
       res.send({ resume_id: resumeId.toString() });
     } catch (error) {
       console.error("Error saving resume to S3:", error);
-      res.status(500).send({ error: "Failed to save resume", message: error.message });
+      const status = error.message.includes("Maximum number of resumes") ? 400 : 500;
+      res.status(status).send({ error: "Failed to save resume", message: error.message });
+    }
+  });
+
+  app.put("/api/users/me/resumes/:resume_id", decodeJWT, async (req, res) => {
+    try {
+      const userId = await DB.getUserIdByEmail(req.user.email);
+      if (!userId) throw new Error("User not found");
+
+      await DB.updateResumeMetadata(req.params.resume_id, userId, {
+        name: req.body.name,  // Use name consistently
+        description: req.body.description
+      });
+
+      res.send({ success: true });
+    } catch (error) {
+      console.error("Error updating resume metadata:", error);
+      res.status(500).send({ error: "Failed to update resume", message: error.message });
     }
   });
 
@@ -281,6 +308,24 @@ async function defineRoutes() {
       res.clearCookie("token");
       res.send({ success: true });
     });
+  });
+
+  // Update resume metadata
+  app.put('/api/resumes/:resumeId/metadata', async (req, res) => {
+    try {
+      const { resumeId } = req.params;
+      const userId = req.user.id;
+      const updates = {
+        name: req.body.name,
+        description: req.body.description
+      };
+
+      await DB.updateResumeMetadata(resumeId, userId, updates);
+      res.json({ message: 'Resume metadata updated successfully' });
+    } catch (err) {
+      console.error('Error updating resume metadata:', err);
+      res.status(400).json({ error: err.message });
+    }
   });
 
   // Catch-all for React app
