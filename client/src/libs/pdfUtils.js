@@ -13,8 +13,8 @@ export const tintPdfBackground = async (inputFile) => {
         y: 0,
         width,
         height,
-        color: rgb(0, 1, 0), // Green
-        opacity: 0.2, // 20% opacity
+        color: rgb(0.95, 0.95, 0.95), // Light grey
+        opacity: 0.3, // 30% opacity
       });
     });
 
