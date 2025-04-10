@@ -5,6 +5,7 @@ import PDFToolbar from './pdfToolbar';
 import ResumeParser from './resumeParser';
 import AIAnalysisOverlay from './AIAnalysisOverlay';
 import { tintPdfBackground } from '../libs/pdfUtils';
+import { useTheme } from '@mui/material/styles';
 
 // Set up PDF.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = '/pdfjs/pdf.worker.min.js';
@@ -14,147 +15,36 @@ function PDFPreview({ file: initialFile, resumeId, onSaveSuccess }) {
   const [originalFile, setOriginalFile] = useState(initialFile); // Original PDF
   const [numPages, setNumPages] = useState(null);
   const [pageNumber, setPageNumber] = useState(1);
-  const [scale, setScale] = useState(1.0);
-  const [containerWidth, setContainerWidth] = useState(null);
-  const containerRef = useRef(null);
-  const resizeTimeoutRef = useRef(null);
-  const initialScaleRef = useRef(null);
-  const MIN_SCALE = 0.25; // Minimum zoom level
-  const MAX_SCALE = 5.0;  // Maximum zoom level
-  const SCALE_STEP = 0.1; // More granular step size for smoother zooming
+  const [scale, setScale] = useState(1.4); // Start at 140% to match actual PDF size (compensating for PDF.js scaling)
+  const MIN_SCALE = 0.7;  // Minimum scale adjusted
+  const MAX_SCALE = 7.0;  // Maximum scale adjusted
+  const SCALE_STEP = 0.1;
   const [loading, setLoading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState(null);
   const [jobDesc, setJobDesc] = useState('');
   const [url, setUrl] = useState('');
   const [scoreData, setScoreData] = useState(null);
   const [currentResumeId, setCurrentResumeId] = useState(resumeId);
+  const theme = useTheme();
 
-  // Modify the resize observer to be more stable and only update width on significant changes
-  useEffect(() => {
-    if (!containerRef.current) return;
-
-    const resizeObserver = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const newWidth = Math.round(entry.contentRect.width);
-        
-        // Only update if the width change is significant (more than 20px)
-        if (Math.abs(newWidth - (containerWidth || 0)) > 20) {
-          // Clear any existing timeout
-          if (resizeTimeoutRef.current) {
-            clearTimeout(resizeTimeoutRef.current);
-          }
-          
-          // Set a new timeout to update the width after a delay
-          resizeTimeoutRef.current = setTimeout(() => {
-            setContainerWidth(newWidth);
-          }, 250);
-        }
-      }
-    });
-
-    resizeObserver.observe(containerRef.current);
-    return () => {
-      resizeObserver.disconnect();
-      if (resizeTimeoutRef.current) {
-        clearTimeout(resizeTimeoutRef.current);
-      }
-    };
-  }, [containerWidth]);
-
-  // Calculate initial scale only once when PDF is first loaded
-  useEffect(() => {
-    if (!containerWidth || !file || initialScaleRef.current) return;
-    
-    // Base width is for a typical resume page (8.5" x 11" at 96 DPI)
-    const baseWidth = 816; // 8.5 inches * 96 DPI
-    const availableWidth = containerWidth - 24;
-    const idealScale = (availableWidth / baseWidth) * 1.8;
-    
-    // Clamp the scale between MIN_SCALE and MAX_SCALE
-    const newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, idealScale));
-    setScale(newScale);
-    initialScaleRef.current = newScale; // Store the initial scale
-  }, [containerWidth, file]);
-
-  // Listen for job description from Chrome extension
-  useEffect(() => {
-    let isSubscribed = true;
-    const handleJobDescriptionEvent = (event) => {
-      if (!isSubscribed) return;
-      
-      // Handle CustomEvent
-      if (event.detail && event.detail.text) {
-        setJobDesc(event.detail.text);
-        if (event.detail.url) {
-          setUrl(event.detail.url);
-        }
-        return;
-      }
-      
-      // Handle postMessage
-      if (event.data && event.data.type === 'AIpplyNowJobDescription') {
-        setJobDesc(event.data.text);
-        if (event.data.url) {
-          setUrl(event.data.url);
-        }
-        return;
-      }
-    };
-
-    // Set up event listeners
-    document.addEventListener('AIpplyNowJobDescription', handleJobDescriptionEvent);
-    window.addEventListener('message', handleJobDescriptionEvent);
-    
-    // Check window property once on mount
-    if (window.AIpplyNowData) {
-      setJobDesc(window.AIpplyNowData.text);
-      if (window.AIpplyNowData.url) {
-        setUrl(window.AIpplyNowData.url);
-      }
-      window.AIpplyNowData = null;
-    }
-
-    return () => {
-      isSubscribed = false;
-      document.removeEventListener('AIpplyNowJobDescription', handleJobDescriptionEvent);
-      window.removeEventListener('message', handleJobDescriptionEvent);
-    };
-  }, []); // Empty dependency array since we only want to set this up once
-
-  // Update file when initialFile changes
-  useEffect(() => {
-    if (initialFile) {
-      setOriginalFile(initialFile);
-      tintPdfBackground(initialFile).then((tintedFile) => {
-        setLocalFile(tintedFile);
-        // Reset the initial scale ref when loading a new file
-        initialScaleRef.current = null;
-      });
-    }
-  }, [initialFile]);
-
-  // Update currentResumeId when resumeId prop changes
-  useEffect(() => {
-    setCurrentResumeId(resumeId);
-  }, [resumeId]);
-
+  const containerRef = useRef(null);
+  
   const onDocumentLoadSuccess = useCallback(({ numPages }) => {
     setNumPages(numPages);
     setPageNumber(1);
   }, []);
 
   const handleZoomIn = useCallback(() => {
-    setScale((prevScale) => Math.min(prevScale + SCALE_STEP, MAX_SCALE));
+    setScale(prevScale => Math.min(prevScale + SCALE_STEP, MAX_SCALE));
   }, []);
 
   const handleZoomOut = useCallback(() => {
-    setScale((prevScale) => Math.max(prevScale - SCALE_STEP, MIN_SCALE));
+    setScale(prevScale => Math.max(prevScale - SCALE_STEP, MIN_SCALE));
   }, []);
 
   const handleResetZoom = useCallback(() => {
-    if (!containerWidth || !initialScaleRef.current) return;
-    setScale(initialScaleRef.current);
-  }, [containerWidth]);
+    setScale(1.0); // Reset to true 100%
+  }, []);
 
   const handlePrevPage = useCallback(() => {
     setPageNumber((prev) => Math.max(1, prev - 1));
@@ -239,6 +129,21 @@ function PDFPreview({ file: initialFile, resumeId, onSaveSuccess }) {
     }
   };
 
+  // Update file when initialFile changes
+  useEffect(() => {
+    if (initialFile) {
+      setOriginalFile(initialFile);
+      tintPdfBackground(initialFile).then((tintedFile) => {
+        setLocalFile(tintedFile);
+      });
+    }
+  }, [initialFile]);
+
+  // Update currentResumeId when resumeId prop changes
+  useEffect(() => {
+    setCurrentResumeId(resumeId);
+  }, [resumeId]);
+
   return (
     <Box
       sx={{
@@ -250,18 +155,25 @@ function PDFPreview({ file: initialFile, resumeId, onSaveSuccess }) {
         bgcolor: 'background.default',
         gap: 2,
         boxSizing: 'border-box',
+        position: 'relative',
+        p: 2, // Add padding to main container
       }}
     >
       <Box
         sx={{
+          position: { md: 'absolute' },
+          left: { md: 16 }, // Add left padding
+          top: { md: 16 }, // Add top padding
+          bottom: { md: 16 }, // Add bottom padding
+          width: { xs: '100%', md: 'calc(60% - 24px)' }, // Adjust width to account for padding
+          height: { xs: '50vh', md: 'auto' },
           display: 'flex',
           flexDirection: 'column',
-          flex: { xs: '1 1 auto', md: '1 1 60%' },
-          height: { xs: '50vh', md: '100%' },
           overflow: 'hidden',
-          minWidth: 0,
           boxSizing: 'border-box',
-          position: 'relative',
+          bgcolor: 'background.paper',
+          borderRadius: 1,
+          boxShadow: 1,
         }}
       >
         <PDFToolbar
@@ -272,19 +184,38 @@ function PDFPreview({ file: initialFile, resumeId, onSaveSuccess }) {
           onZoomIn={handleZoomIn}
           onZoomOut={handleZoomOut}
           onResetZoom={handleResetZoom}
-          zoomLevel={scale}
+          zoomLevel={scale / 1.4} // Adjust displayed zoom level to show true scale
         />
         <Box
           ref={containerRef}
           sx={{
             flexGrow: 1,
             overflow: 'auto',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'flex-start',
-            p: 1,
-            bgcolor: 'background.paper',
-            position: 'relative',
+            p: 2,
+            bgcolor: theme.palette.mode === 'dark' ? 'rgba(0, 0, 0, 0.2)' : '#ffffff',
+            '& .react-pdf__Document': {
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              width: '100%',
+              minWidth: 'min-content',
+              paddingLeft: 2, // Add padding to prevent left cut-off
+              paddingRight: 2, // Add padding to prevent right cut-off
+              boxSizing: 'border-box',
+            },
+            '& .react-pdf__Page': {
+              boxShadow: theme.palette.mode === 'dark' 
+                ? '0 0 10px rgba(255, 255, 255, 0.1)'
+                : '0 0 10px rgba(0, 0, 0, 0.1)',
+              borderRadius: 1,
+              bgcolor: '#ffffff',
+              margin: '0 auto', // Center the page
+              '& canvas': {
+                maxWidth: 'none !important',
+                height: 'auto !important',
+                display: 'block', // Prevent inline spacing issues
+              }
+            },
           }}
         >
           {file ? (
@@ -301,7 +232,6 @@ function PDFPreview({ file: initialFile, resumeId, onSaveSuccess }) {
                 <Page
                   pageNumber={pageNumber}
                   scale={scale}
-                  width={containerWidth ? containerWidth * 0.95 : undefined}
                   renderTextLayer={false}
                   renderAnnotationLayer={false}
                 />
@@ -318,15 +248,19 @@ function PDFPreview({ file: initialFile, resumeId, onSaveSuccess }) {
 
       <Box
         sx={{
-          flex: { xs: '1 1 auto', md: '1 1 40%' },
-          height: { xs: '50vh', md: '100%' },
+          position: { md: 'absolute' },
+          right: { md: 16 }, // Add right padding
+          top: { md: 16 }, // Add top padding
+          bottom: { md: 16 }, // Add bottom padding
+          width: { xs: '100%', md: 'calc(40% - 24px)' }, // Adjust width to account for padding
+          height: { xs: '50vh', md: 'auto' },
           overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
-          minWidth: 0,
-          maxWidth: { md: '40%' },
           boxSizing: 'border-box',
-          position: 'relative',
+          bgcolor: 'background.paper',
+          borderRadius: 1,
+          boxShadow: 1,
         }}
       >
         <Box
