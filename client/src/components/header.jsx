@@ -66,23 +66,37 @@ function Header({
         zIndex: theme.zIndex.drawer + 1,
         bgcolor: 'background.paper',
         borderBottom: 1,
-        borderColor: 'divider'
+        borderColor: 'divider',
+        backdropFilter: 'blur(8px)',
+        boxShadow: theme.shadows[2]
       }}
     >
       <Toolbar>
         <Typography
-          variant="h6"
+          variant="h5"
           component="div"
           sx={{
             flexGrow: 1,
-            fontFamily: currentTheme === "matrix" ? '"Roboto Mono", monospace' : "inherit",
-            color: currentTheme === "matrix" ? "#00FF00" : theme.palette.text.primary,
+            fontFamily: currentTheme === "matrix" ? '"Roboto Mono", monospace' : '"Inter", "Roboto", sans-serif',
+            color: currentTheme === "matrix" ? "#00FF00" : theme.palette.primary.main,
+            fontWeight: 600,
+            letterSpacing: '0.5px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1
           }}
         >
-          AIpplyNow
+          Neo Resume
         </Typography>
 
-        <Box sx={{ display: "flex", alignItems: "center", gap: spacing.sm }}>
+        <Box sx={{ 
+          display: "flex", 
+          alignItems: "center", 
+          gap: spacing.sm,
+          '& > *': {
+            transition: 'all 0.2s ease-in-out'
+          }
+        }}>
           <Tooltip title={`Switch to ${currentTheme === "matrix" ? "modern" : "matrix"} theme`}>
             <IconButton
               onClick={toggleTheme}
