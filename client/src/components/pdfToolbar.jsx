@@ -1,9 +1,11 @@
 import React from 'react';
-import { Stack, Typography, IconButton, Tooltip, Button } from '@mui/material';
+import { Stack, Typography, IconButton, Tooltip, Button, Paper } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
+import ZoomInIcon from '@mui/icons-material/ZoomIn';
+import ZoomOutIcon from '@mui/icons-material/ZoomOut';
 import { useTheme } from '@mui/material/styles';
 
 function PDFToolbar({ 
@@ -17,8 +19,8 @@ function PDFToolbar({
   zoomLevel 
 }) {
   const theme = useTheme();
-  const toolbarIconSize = 24;
-  const toolbarTextSize = 16;
+  const toolbarIconSize = 20;
+  const toolbarTextSize = 14;
 
   const handlePrevClick = () => {
     console.log('Previous button clicked', { currentPage, numPages });
@@ -31,117 +33,167 @@ function PDFToolbar({
   };
 
   return (
-    <Stack
-      direction="row"
-      alignItems="center"
-      spacing={1}
+    <Paper
+      elevation={0}
       sx={{
-        p: 1,
-        bgcolor: theme.palette.background.paper,
-        minHeight: '40px',
-        zIndex: 1,
-        justifyContent: 'space-between',
+        bgcolor: theme.palette.mode === 'dark' 
+          ? 'rgba(255, 255, 255, 0.08)' 
+          : 'rgba(0, 0, 0, 0.03)',
         borderBottom: `1px solid ${theme.palette.divider}`,
+        backdropFilter: 'blur(8px)',
+        position: 'sticky',
+        top: 0,
+        zIndex: 2,
       }}
     >
-      <Stack direction="row" spacing={1} alignItems="center">
-        <Tooltip title="Previous page">
-          <IconButton
-            onClick={handlePrevClick}
-            disabled={currentPage === 1}
-            aria-label="Previous page"
-            sx={{ p: 0.5, color: theme.palette.text.primary }}
-          >
-            <ArrowBackIcon sx={{ fontSize: toolbarIconSize }} />
-          </IconButton>
-        </Tooltip>
-        <Typography
+      <Stack
+        direction="row"
+        alignItems="center"
+        spacing={2}
+        sx={{
+          px: 2,
+          py: 1,
+          minHeight: '48px',
+          justifyContent: 'space-between',
+        }}
+      >
+        {/* Page Navigation */}
+        <Stack 
+          direction="row" 
+          spacing={0.5} 
+          alignItems="center"
           sx={{
-            fontSize: toolbarTextSize,
-            whiteSpace: 'nowrap',
-            color: theme.palette.text.primary,
+            bgcolor: theme.palette.mode === 'dark' 
+              ? 'rgba(255, 255, 255, 0.1)' 
+              : 'rgba(0, 0, 0, 0.05)',
+            borderRadius: 1.5,
+            px: 1,
+            py: 0.5,
           }}
         >
-          Page {currentPage} of {numPages || '?'}
-        </Typography>
-        <Tooltip title="Next page">
-          <IconButton
-            onClick={handleNextClick}
-            disabled={currentPage === numPages || !numPages}
-            aria-label="Next page"
-            sx={{ p: 0.5, color: theme.palette.text.primary }}
-          >
-            <ArrowForwardIcon sx={{ fontSize: toolbarIconSize }} />
-          </IconButton>
-        </Tooltip>
-      </Stack>
-
-      <Stack direction="row" spacing={1} alignItems="center">
-        <Tooltip title="Zoom out">
-          <IconButton
-            onClick={onZoomOut}
-            disabled={zoomLevel <= 0.25}
-            aria-label="Zoom out"
-            sx={{ p: 0.5, color: theme.palette.text.primary }}
-          >
-            <SearchIcon sx={{ fontSize: toolbarIconSize }} />
-            <Typography
-              component="span"
-              sx={{
-                position: 'absolute',
-                top: '42%',
-                left: '43%',
-                transform: 'translate(-50%, -50%)',
-                fontSize: toolbarTextSize,
+          <Tooltip title="Previous page">
+            <IconButton
+              onClick={handlePrevClick}
+              disabled={currentPage === 1}
+              aria-label="Previous page"
+              size="small"
+              sx={{ 
                 color: theme.palette.text.primary,
+                '&:hover': {
+                  bgcolor: theme.palette.mode === 'dark' 
+                    ? 'rgba(255, 255, 255, 0.1)' 
+                    : 'rgba(0, 0, 0, 0.05)',
+                },
               }}
             >
-              -
-            </Typography>
-          </IconButton>
-        </Tooltip>
+              <ArrowBackIcon sx={{ fontSize: toolbarIconSize }} />
+            </IconButton>
+          </Tooltip>
+          <Typography
+            sx={{
+              fontSize: toolbarTextSize,
+              whiteSpace: 'nowrap',
+              color: theme.palette.text.secondary,
+              fontWeight: 500,
+              px: 1,
+            }}
+          >
+            {currentPage} / {numPages || '?'}
+          </Typography>
+          <Tooltip title="Next page">
+            <IconButton
+              onClick={handleNextClick}
+              disabled={currentPage === numPages || !numPages}
+              aria-label="Next page"
+              size="small"
+              sx={{ 
+                color: theme.palette.text.primary,
+                '&:hover': {
+                  bgcolor: theme.palette.mode === 'dark' 
+                    ? 'rgba(255, 255, 255, 0.1)' 
+                    : 'rgba(0, 0, 0, 0.05)',
+                },
+              }}
+            >
+              <ArrowForwardIcon sx={{ fontSize: toolbarIconSize }} />
+            </IconButton>
+          </Tooltip>
+        </Stack>
 
-        <Button
-          onClick={onResetZoom}
-          variant="text"
-          size="small"
+        {/* Zoom Controls */}
+        <Stack 
+          direction="row" 
+          spacing={0.5} 
+          alignItems="center"
           sx={{
-            minWidth: '80px',
-            color: theme.palette.text.primary,
-            '&:hover': {
-              bgcolor: 'rgba(0, 0, 0, 0.04)',
-            },
+            bgcolor: theme.palette.mode === 'dark' 
+              ? 'rgba(255, 255, 255, 0.1)' 
+              : 'rgba(0, 0, 0, 0.05)',
+            borderRadius: 1.5,
+            px: 1,
+            py: 0.5,
           }}
-          startIcon={<RestartAltIcon />}
         >
-          {Math.round(zoomLevel * 100)}%
-        </Button>
-
-        <Tooltip title="Zoom in">
-          <IconButton
-            onClick={onZoomIn}
-            disabled={zoomLevel >= 5.0}
-            aria-label="Zoom in"
-            sx={{ p: 0.5, color: theme.palette.text.primary }}
-          >
-            <SearchIcon sx={{ fontSize: toolbarIconSize }} />
-            <Typography
-              component="span"
-              sx={{
-                position: 'absolute',
-                top: '42%',
-                left: '43%',
-                transform: 'translate(-50%, -50%)',
-                fontSize: toolbarTextSize,
+          <Tooltip title="Zoom out">
+            <IconButton
+              onClick={onZoomOut}
+              disabled={zoomLevel <= 0.25}
+              aria-label="Zoom out"
+              size="small"
+              sx={{ 
                 color: theme.palette.text.primary,
+                '&:hover': {
+                  bgcolor: theme.palette.mode === 'dark' 
+                    ? 'rgba(255, 255, 255, 0.1)' 
+                    : 'rgba(0, 0, 0, 0.05)',
+                },
               }}
             >
-              +
-            </Typography>
-          </IconButton>
-        </Tooltip>
+              <ZoomOutIcon sx={{ fontSize: toolbarIconSize }} />
+            </IconButton>
+          </Tooltip>
+
+          <Button
+            onClick={onResetZoom}
+            variant="text"
+            size="small"
+            sx={{
+              minWidth: '70px',
+              color: theme.palette.text.secondary,
+              fontWeight: 500,
+              fontSize: toolbarTextSize,
+              '&:hover': {
+                bgcolor: theme.palette.mode === 'dark' 
+                  ? 'rgba(255, 255, 255, 0.1)' 
+                  : 'rgba(0, 0, 0, 0.05)',
+              },
+            }}
+            startIcon={<RestartAltIcon sx={{ fontSize: toolbarIconSize }} />}
+          >
+            {Math.round(zoomLevel * 100)}%
+          </Button>
+
+          <Tooltip title="Zoom in">
+            <IconButton
+              onClick={onZoomIn}
+              disabled={zoomLevel >= 5.0}
+              aria-label="Zoom in"
+              size="small"
+              sx={{ 
+                color: theme.palette.text.primary,
+                '&:hover': {
+                  bgcolor: theme.palette.mode === 'dark' 
+                    ? 'rgba(255, 255, 255, 0.1)' 
+                    : 'rgba(0, 0, 0, 0.05)',
+                },
+              }}
+            >
+              <ZoomInIcon sx={{ fontSize: toolbarIconSize }} />
+            </IconButton>
+          </Tooltip>
+        </Stack>
       </Stack>
-    </Stack>
+    </Paper>
   );
 }
 

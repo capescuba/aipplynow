@@ -3,6 +3,7 @@ import { Box, Typography, CircularProgress } from '@mui/material';
 import { Document, Page, pdfjs } from 'react-pdf';
 import PDFToolbar from './pdfToolbar';
 import ResumeParser from './resumeParser';
+import AIAnalysisOverlay from './AIAnalysisOverlay';
 import { tintPdfBackground } from '../libs/pdfUtils';
 
 // Set up PDF.js worker
@@ -260,6 +261,7 @@ function PDFPreview({ file: initialFile, resumeId, onSaveSuccess }) {
           overflow: 'hidden',
           minWidth: 0,
           boxSizing: 'border-box',
+          position: 'relative',
         }}
       >
         <PDFToolbar
@@ -282,30 +284,30 @@ function PDFPreview({ file: initialFile, resumeId, onSaveSuccess }) {
             alignItems: 'flex-start',
             p: 1,
             bgcolor: 'background.paper',
+            position: 'relative',
           }}
         >
-          {loading ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-              <CircularProgress />
-            </Box>
-          ) : file ? (
-            <Document
-              file={file}
-              onLoadSuccess={onDocumentLoadSuccess}
-              loading={
-                <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-                  <CircularProgress />
-                </Box>
-              }
-            >
-              <Page
-                pageNumber={pageNumber}
-                scale={scale}
-                width={containerWidth ? containerWidth * 0.95 : undefined}
-                renderTextLayer={false}
-                renderAnnotationLayer={false}
-              />
-            </Document>
+          {file ? (
+            <>
+              <Document
+                file={file}
+                onLoadSuccess={onDocumentLoadSuccess}
+                loading={
+                  <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+                    <CircularProgress />
+                  </Box>
+                }
+              >
+                <Page
+                  pageNumber={pageNumber}
+                  scale={scale}
+                  width={containerWidth ? containerWidth * 0.95 : undefined}
+                  renderTextLayer={false}
+                  renderAnnotationLayer={false}
+                />
+              </Document>
+              {loading && <AIAnalysisOverlay />}
+            </>
           ) : (
             <Typography variant="body1" color="text.secondary">
               No PDF file selected

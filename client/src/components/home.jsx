@@ -7,6 +7,7 @@ import {
   Paper,
   IconButton,
 } from "@mui/material";
+import { useTheme } from '@mui/material/styles';
 import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
 import Header from "./header";
@@ -19,6 +20,8 @@ import {
   EmptyState,
   TransitionComponent,
 } from "./common";
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 
 function Home({
   onLogout,
@@ -32,6 +35,8 @@ function Home({
   currentTheme,
   toggleTheme,
 }) {
+  const theme = useTheme();
+
   console.log("Home component rendering with props:", {
     isLoggedIn,
     currentTheme,
@@ -281,22 +286,25 @@ function Home({
               bottom: 0,
               width: 280,
               bgcolor: 'background.paper',
-              borderRight: 1,
-              borderColor: 'divider',
               transition: 'left 0.3s ease',
               zIndex: 1,
               display: 'flex',
               flexDirection: 'column',
               overflow: 'hidden',
+              borderRadius: 2,
+              mt: 2,
+              mb: 2,
+              ml: 2,
             }}
           >
             <Paper
-              elevation={0}
+              elevation={3}
               sx={{
                 display: 'flex',
                 flexDirection: 'column',
                 height: '100%',
-                borderRadius: 0,
+                borderRadius: 'inherit',
+                overflow: 'hidden',
               }}
             >
               <Box
@@ -372,28 +380,37 @@ function Home({
             sx={{
               position: 'absolute',
               left: isResumesExpanded ? 280 : 0,
-              top: 20,
-              zIndex: 2,
-              bgcolor: 'background.paper',
-              border: 1,
-              borderColor: 'divider',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              zIndex: 1,
+              bgcolor: 'transparent',
+              border: 0,
               borderLeft: isResumesExpanded ? 1 : 0,
               borderRight: isResumesExpanded ? 0 : 1,
+              borderColor: 'divider',
               borderRadius: isResumesExpanded ? '0 4px 4px 0' : '4px',
-              transition: 'left 0.3s ease',
+              transition: 'left 0.3s ease, background-color 0.2s ease',
+              opacity: 0.6,
+              width: 20,
+              height: 48,
               '&:hover': {
-                bgcolor: 'action.hover',
+                bgcolor: theme.palette.mode === 'dark' 
+                  ? 'rgba(255, 255, 255, 0.1)' 
+                  : 'rgba(0, 0, 0, 0.05)',
+                opacity: 1,
               },
             }}
           >
-            {isResumesExpanded ? <KeyboardArrowLeftIcon /> : <KeyboardArrowRightIcon />}
+            {isResumesExpanded 
+              ? <ArrowBackIcon sx={{ fontSize: 16 }} />
+              : <ArrowForwardIcon sx={{ fontSize: 16 }} />}
           </IconButton>
 
           {/* Main Content */}
           <Box
             sx={{
               flexGrow: 1,
-              ml: isResumesExpanded ? '280px' : 0,
+              ml: isResumesExpanded ? 'calc(280px + 16px)' : 0,
               transition: 'margin-left 0.3s ease',
               display: 'flex',
               gap: 2,
@@ -410,15 +427,19 @@ function Home({
               }}
             >
               <Paper
+                elevation={3}
                 sx={{
                   flexGrow: 1,
                   display: 'flex',
                   flexDirection: 'column',
                   bgcolor: 'background.paper',
-                  borderRadius: 1,
-                  boxShadow: 1,
+                  borderRadius: 2,
                   overflow: 'hidden',
-                  minWidth: 0, // Allows the paper to shrink below its content size
+                  minWidth: 0,
+                  '& > div': {
+                    borderRadius: 'inherit',
+                    overflow: 'hidden',
+                  },
                 }}
               >
                 {selectedFile ? (
