@@ -1,5 +1,5 @@
 // App.jsx
-import React, { useEffect, useState, useRef, useCallback } from "react";
+import React, { useEffect, useRef, useCallback, useState } from "react";
 import {
   BrowserRouter as Router,
   Route,
@@ -14,8 +14,16 @@ import Home from "./components/home";
 import Help from "./components/help";
 import Session from "./libs/session";
 import { modernTheme, matrixTheme } from "./themes";
+import DebugPanel from "./components/DebugPanel";
+import { withStateTracking } from "./libs/withStateTracking";
+import { useTrackedState } from "./libs/useTrackedState";
 
 const SESSION_TIMEOUT = 120000;
+
+// Wrap components with state tracking
+const TrackedHome = withStateTracking(Home);
+const TrackedHelp = withStateTracking(Help);
+const TrackedLinkedInCallback = withStateTracking(LinkedInCallback);
 
 function MatrixBackground() {
   const canvasRef = useRef(null);
@@ -86,14 +94,14 @@ function MatrixBackground() {
   );
 }
 
-function App({ currentTheme, toggleTheme }) {
-  const [configData, setConfigData] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [authState, setAuthState] = useState({
+function AppContent({ currentTheme, toggleTheme }) {
+  const [configData, setConfigData] = useTrackedState("", "AppContent", "configData");
+  const [loading, setLoading] = useTrackedState(true, "AppContent", "loading");
+  const [error, setError] = useTrackedState(null, "AppContent", "error");
+  const [authState, setAuthState] = useTrackedState({
     isLoggedIn: sessionStorage.getItem("isLoggedIn") === "true",
     userInfo: JSON.parse(Session.getSessionStorageWithTimeout("userInfo") || "{}"),
-  });
+  }, "AppContent", "authState");
   const navigate = useNavigate();
 
   const handleLogin = useCallback((code, userInfo, isLoggedIn) => {
@@ -187,60 +195,61 @@ function App({ currentTheme, toggleTheme }) {
   );
 
   console.log("App - Rendering, isLoggedIn:", authState.isLoggedIn);
+  const theme = currentTheme === "matrix" ? matrixTheme : modernTheme;
+
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-      {currentTheme === "matrix" && <MatrixBackground />}
+    <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Routes>
-        <Route
-          path="/"
-          element={
-            <Home
-              onLogout={handleLogout}
-              userInfo={authState.userInfo}
-              isLoggedIn={authState.isLoggedIn}
-              clientId={configData.clientId}
-              redirectUri={configData.redirectUri}
-              scope="openid profile email"
-              state="GUEST"
-              onLoginSuccess={handleLogin}
-              currentTheme={currentTheme}
-              toggleTheme={toggleTheme}
-            />
-          }
-        />
-        <Route path="/callback" element={<LinkedInCallback />} />
-        <Route path="/help" element={<Help />} />
-        <Route path="*" element={<Navigate to="/" />} />
-      </Routes>
-    </Box>
+      <Box sx={{ position: 'relative', minHeight: '100vh' }}>
+        <Routes>
+          <Route 
+            path="/linkedin/callback" 
+            element={
+              <TrackedLinkedInCallback 
+                onLoginSuccess={handleLogin}
+                clientId={configData?.clientId}
+                redirectUri={configData?.redirectUri}
+              />
+            } 
+          />
+          <Route path="/help" element={<TrackedHelp />} />
+          <Route
+            path="/"
+            element={
+              <TrackedHome
+                onLogout={handleLogout}
+                toggleTheme={toggleTheme}
+                currentTheme={currentTheme}
+                userInfo={authState.userInfo}
+                isLoggedIn={authState.isLoggedIn}
+                clientId={configData?.clientId}
+                redirectUri={configData?.redirectUri}
+                scope="openid profile email"
+                state="GUEST"
+                onLoginSuccess={handleLogin}
+              />
+            }
+          />
+        </Routes>
+        <DebugPanel />
+      </Box>
+    </ThemeProvider>
   );
 }
 
+// Wrap AppContent with state tracking
+const TrackedAppContent = withStateTracking(AppContent);
+
 export default function AppWrapper() {
   const [currentTheme, setCurrentTheme] = useState("modern");
-  const theme = currentTheme === "matrix" ? matrixTheme : modernTheme;
-
-  console.log("Current theme:", currentTheme);
-  console.log("Theme object:", theme);
 
   const toggleTheme = () => {
-    console.log("Toggling theme from", currentTheme, "to", currentTheme === "matrix" ? "modern" : "matrix");
     setCurrentTheme(currentTheme === "matrix" ? "modern" : "matrix");
   };
 
   return (
-    <ThemeProvider theme={theme}>
-      <Box sx={{ 
-        width: '100%', 
-        minHeight: '100vh',
-        bgcolor: 'background.default',
-        color: 'text.primary'
-      }}>
-        <Router>
-          <App currentTheme={currentTheme} toggleTheme={toggleTheme} />
-        </Router>
-      </Box>
-    </ThemeProvider>
+    <Router>
+      <TrackedAppContent currentTheme={currentTheme} toggleTheme={toggleTheme} />
+    </Router>
   );
 }

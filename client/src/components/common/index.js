@@ -101,59 +101,6 @@ export const TransitionComponent = styled("div")(({ theme }) => ({
   }),
 }));
 
-// Resume List Component
-export const ResumeList = ({ resumes, onSelect, onEdit, onDelete, selectedId }) => (
-  <List sx={{ width: "100%", p: 0 }}>
-    {resumes.map((resume) => (
-      <Card
-        key={resume.resume_id}
-        onClick={() => onSelect(resume.resume_id)}
-        sx={{
-          mb: 2,
-          display: "flex",
-          alignItems: "center",
-          cursor: "pointer",
-          bgcolor: selectedId === resume.resume_id ? "action.selected" : "background.paper",
-          transition: "background-color 0.2s ease-in-out",
-          "&:hover": {
-            bgcolor: "action.hover",
-          },
-        }}
-      >
-        <Box sx={{ p: 2, display: "flex", alignItems: "center", flex: 1 }}>
-          <DescriptionIcon sx={{ mr: 2, color: "primary.main" }} />
-          <Box>
-            <Typography variant="subtitle1" component="div" sx={{ fontWeight: selectedId === resume.resume_id ? 600 : 400 }}>
-              {resume.name}
-            </Typography>
-            {resume.description && (
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                {resume.description}
-              </Typography>
-            )}
-          </Box>
-        </Box>
-        <Box sx={{ pr: 1 }}>
-          <IconButton 
-            onClick={(e) => { e.stopPropagation(); onEdit(resume); }}
-            size="small"
-            sx={{ mr: 1 }}
-          >
-            <EditIcon fontSize="small" />
-          </IconButton>
-          <IconButton 
-            onClick={(e) => { e.stopPropagation(); onDelete(resume.resume_id); }}
-            size="small"
-            color="error"
-          >
-            <DeleteIcon fontSize="small" />
-          </IconButton>
-        </Box>
-      </Card>
-    ))}
-  </List>
-);
-
 // Empty State Component
 export const EmptyState = ({ message, action, onAction }) => (
   <Box
