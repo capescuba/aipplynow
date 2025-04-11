@@ -1,5 +1,5 @@
 // Home.js
-import React, { useState, useEffect } from "react";
+import React, { useEffect } from "react";
 import {
   Typography,
   Box,
@@ -17,12 +17,15 @@ import PDFPreview from "./pdfPreview";
 import {
   LoadingState,
   Toast,
-  ResumeList,
   EmptyState,
   TransitionComponent,
 } from "./common";
+import ResumeList from "./ResumeList";
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
+import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
+import { useTrackedState } from '../libs/useTrackedState';
 
 function Home({
   onLogout,
@@ -46,31 +49,60 @@ function Home({
     hasRedirectUri: !!redirectUri
   });
 
-  const [resumes, setResumes] = useState([]);
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [selectedResumeId, setSelectedResumeId] = useState(null);
-  const [editingResume, setEditingResume] = useState(null);
-  const [newResume, setNewResume] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [toast, setToast] = useState({ open: false, message: "", severity: "success" });
-  const [isResumesExpanded, setIsResumesExpanded] = useState(true);
-  const [nameError, setNameError] = useState("");
+  // Core data states
+  const [resumes, setResumes] = useTrackedState([], "Home", "resumes");
+  const [selectedResume, setSelectedResume] = useTrackedState({
+    id: null,
+    file: null
+  }, "Home", "selectedResume");
+
+  // Debug selectedResume changes
+  useEffect(() => {
+    console.log('[DEBUG] selectedResume changed:', selectedResume);
+  }, [selectedResume]);
+
+  // UI states
+  const [uiState, setUiState] = useTrackedState({
+    isLoading: false,
+    isResumesExpanded: true,
+    error: null
+  }, "Home", "uiState");
+
+  // Notifications
+  const [toast, setToast] = useTrackedState({
+    open: false,
+    message: "",
+    severity: "success"
+  }, "Home", "toast");
+
+  // Helper functions to update specific parts of UI state
+  const setLoading = (isLoading) => {
+    setUiState(prev => ({ ...prev, isLoading }));
+  };
+
+  const setError = (error) => {
+    setUiState(prev => ({ ...prev, error }));
+  };
+
+  const toggleResumesPanel = () => {
+    setUiState(prev => ({ ...prev, isResumesExpanded: !prev.isResumesExpanded }));
+  };
 
   useEffect(() => {
     if (isLoggedIn) {
       fetchResumes();
     } else {
       setResumes([]);
-      setSelectedFile(null);
-      setSelectedResumeId(null);
-      setEditingResume(null);
-      setNewResume(null);
+      setSelectedResume({
+        id: null,
+        file: null
+      });
     }
   }, [isLoggedIn]);
 
   const fetchResumes = async () => {
     try {
-      setIsLoading(true);
+      setLoading(true);
       const response = await fetch("/api/users/me/resumes", {
         credentials: "include",
       });
@@ -85,18 +117,26 @@ function Home({
         severity: "error",
       });
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
   const fetchResumeFile = async (resumeId) => {
     try {
+      console.log('[DEBUG] fetchResumeFile called with resumeId:', resumeId);
+      console.log('[DEBUG] resumeId type:', typeof resumeId);
+      
+      // Ensure resumeId is a string or number
+      if (typeof resumeId !== 'string' && typeof resumeId !== 'number') {
+        throw new Error(`Invalid resume ID type: ${typeof resumeId}`);
+      }
+      
       const response = await fetch(`/api/users/me/resumes/${resumeId}/download`, {
         credentials: "include",
       });
       if (!response.ok) throw new Error(`Failed to fetch resume file: ${response.statusText}`);
       const blob = await response.blob();
-      const file = new File([blob], resumes.find((r) => r.resume_id === resumeId).name, {
+      const file = new File([blob], resumes.find((r) => r.resume_id === resumeId)?.name || 'resume.pdf', {
         type: "application/pdf",
       });
       return file;
@@ -111,13 +151,22 @@ function Home({
     }
   };
 
-  const handleAddNewResume = (event) => {
-    console.log('[DEBUG] handleAddNewResume called');
-    const file = event.target.files[0];
-    console.log('[DEBUG] File selected:', file?.name, file?.type);
+  const handleAddNewResume = (file) => {
+    console.log('[DEBUG] handleAddNewResume called with file:', file);
     
-    if (!file || file.type !== "application/pdf") {
-      console.log('[DEBUG] Invalid file type:', file?.type);
+    if (!file) {
+      setError("Please select a file to upload.");
+      setToast({
+        open: true,
+        message: "Please select a file to upload.",
+        severity: "error",
+      });
+      return;
+    }
+
+    if (file.type !== "application/pdf") {
+      console.log('[DEBUG] Invalid file type:', file.type);
+      setError("Please select a valid PDF file.");
       setToast({
         open: true,
         message: "Please select a valid PDF file.",
@@ -126,81 +175,116 @@ function Home({
       return;
     }
 
-    // Reset all states first
-    setEditingResume(null);
-    setSelectedResumeId(null);
-    setSelectedFile(null); // Reset selected file first
-    setNewResume(null); // Reset newResume first
+    // Extract name from file name (remove extension)
+    const fileName = file.name.replace(/\.[^/.]+$/, '');
     
-    // Set new states after a brief delay to ensure clean state
-    setTimeout(() => {
-      // Set the selected file and create a new resume metadata object
-      setSelectedFile(file);
-      
-      // Ensure newResume is set with initial values
-      const newResumeData = {
-        name: file.name.replace(/\.[^/.]+$/, ''),
-        description: '',
-        date_uploaded: new Date().toISOString().split('T')[0]
-      };
-      console.log('[DEBUG] Setting new resume data:', newResumeData);
-      setNewResume(newResumeData);
-    }, 0);
+    // Set selected resume with new file
+    const newResume = {
+      id: null,
+      file,
+      name: fileName,
+      description: '',
+      date_uploaded: new Date().toISOString().split('T')[0]
+    };
+    
+    console.log('[DEBUG] Setting selectedResume to:', newResume);
+    console.log('[DEBUG] newResume.id type:', typeof newResume.id);
+    console.log('[DEBUG] newResume.id === null:', newResume.id === null);
+    console.log('[DEBUG] newResume.file:', newResume.file);
+    console.log('[DEBUG] newResume.name:', newResume.name);
+    console.log('[DEBUG] newResume.description:', newResume.description);
+    console.log('[DEBUG] JSON.stringify(newResume):', JSON.stringify(newResume));
+    
+    // Update UI state first to ensure the panel is visible
+    setUiState(prev => ({
+      ...prev,
+      isResumesExpanded: true,
+      isLoading: false,
+      error: null
+    }));
+    
+    // Then update the selected resume
+    setSelectedResume(newResume);
+    setError(null);
   };
 
-  const handleResumeSelect = async (resumeId) => {
+  const handleResumeSelect = async (resume) => {
     try {
-      setIsLoading(true);
-      setSelectedResumeId(resumeId);
+      setLoading(true);
+      console.log('[DEBUG] handleResumeSelect called with resume:', resume);
+      
+      // Extract the resume ID from the resume object
+      const resumeId = resume.resume_id;
+      console.log('[DEBUG] Extracted resumeId:', resumeId);
+      
+      if (!resumeId) {
+        throw new Error('Invalid resume ID');
+      }
+      
       const file = await fetchResumeFile(resumeId);
       if (file) {
-        setSelectedFile(file);
+        setSelectedResume({
+          id: resumeId,
+          file,
+          name: resume.name || file.name.replace(/\.[^/.]+$/, ''),
+          description: resume.description || '',
+          date_uploaded: resume.date_uploaded || new Date().toISOString().split('T')[0]
+        });
         setToast({
           open: true,
           message: "Resume loaded successfully!",
           severity: "success",
         });
-      } else {
-        setSelectedFile(null);
       }
-      setEditingResume(null);
-      setNewResume(null);
+      setError(null);
     } catch (error) {
       console.error("Error selecting resume:", error);
-      setSelectedFile(null);
+      setError("Failed to load resume");
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
-  const handleEditResume = (resume) => {
-    setEditingResume(resume);
-    setNewResume(null);
-    setSelectedResumeId(resume.resume_id);
-    setSelectedFile(null);
+  const handleEdit = (resume) => {
+    setSelectedResume(prev => ({
+      ...prev,
+      id: resume.resume_id,
+      name: resume.name,
+      description: resume.description,
+      date_uploaded: resume.date_uploaded
+    }));
   };
 
-  const handleDeleteResume = async (resumeId) => {
+  const handleCancel = () => {
+    setError(null);
+  };
+
+  const handleDelete = async (resumeId) => {
     try {
       const response = await fetch(`/api/users/me/resumes/${resumeId}`, {
-        method: "DELETE",
-        credentials: "include",
+        method: 'DELETE',
       });
-      if (!response.ok) throw new Error(`Failed to delete resume: ${response.statusText}`);
-      setResumes((prev) => prev.filter((r) => r.resume_id !== resumeId));
-      if (selectedResumeId === resumeId) {
-        setSelectedResumeId(null);
-        setSelectedFile(null);
+
+      if (!response.ok) {
+        throw new Error('Failed to delete resume');
       }
-      setEditingResume(null);
-      setNewResume(null);
+
+      setResumes(resumes.filter(resume => resume.resume_id !== resumeId));
+      if (selectedResume.id === resumeId) {
+        setSelectedResume({
+          id: null,
+          file: null,
+        });
+      }
+      setError(null);
       setToast({
         open: true,
         message: "Resume deleted successfully!",
         severity: "success",
       });
-    } catch (error) {
-      console.error("Error deleting resume:", error);
+    } catch (err) {
+      setError('Failed to delete resume');
+      console.error(err);
       setToast({
         open: true,
         message: "Failed to delete resume. Please try again.",
@@ -211,86 +295,76 @@ function Home({
 
   const handleSaveMetadata = async (updatedMetadata) => {
     try {
-      if (newResume && selectedFile) {
+      setLoading(true);
+      if (!selectedResume.id) {
+        // New resume upload
         console.log('[DEBUG] Uploading new resume with metadata:', updatedMetadata);
+        console.log('[DEBUG] selectedResume before upload:', selectedResume);
+        
         const formData = new FormData();
-        formData.append("resume", selectedFile);
+        formData.append("resume", selectedResume.file);
         formData.append("name", updatedMetadata.name);
         formData.append("description", updatedMetadata.description || '');
 
-        console.log('[DEBUG] Sending upload request');
         const response = await fetch("/api/users/me/resumes", {
           method: "POST",
           credentials: "include",
           body: formData,
         });
 
-        console.log('[DEBUG] Response status:', response.status);
         if (!response.ok) {
           const errorData = await response.json();
-          console.error('[DEBUG] Upload error response:', errorData);
-          throw new Error(errorData.error || `Failed to save new resume: ${response.statusText}`);
+          throw new Error(errorData.error || `Failed to save new resume`);
         }
 
         const savedResume = await response.json();
-        console.log('[DEBUG] Upload successful:', savedResume);
+        console.log('[DEBUG] Saved resume from server:', savedResume);
         
-        // Clear states in correct order
-        setNewResume(null);
-        setSelectedFile(null);
-        setSelectedResumeId(savedResume.resume_id);
-        setEditingResume(null);
-        
-        setToast({
-          open: true,
-          message: "Resume uploaded successfully!",
-          severity: "success",
-        });
-        
-        // Fetch updated resume list
+        // Fetch the latest resumes
         await fetchResumes();
         
-        // Reset file input
+        // Update selectedResume with the saved resume data
+        const updatedSelectedResume = {
+          id: savedResume.resume_id,
+          file: selectedResume.file,
+          name: updatedMetadata.name,
+          description: updatedMetadata.description || '',
+          date_uploaded: savedResume.upload_date ? new Date(savedResume.upload_date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+          resume_id: savedResume.resume_id,
+          user_id: savedResume.user_id,
+          s3_key: savedResume.s3_key,
+          s3_url: savedResume.s3_url
+        };
+        
+        console.log('[DEBUG] Updating selectedResume to:', updatedSelectedResume);
+        setSelectedResume(updatedSelectedResume);
+
+        // Reset the file input
         const fileInput = document.querySelector('input[type="file"]');
         if (fileInput) {
           fileInput.value = '';
         }
-      } else if (updatedMetadata.resume_id) {
-        console.log('[DEBUG] Updating existing resume metadata:', updatedMetadata);
-        const response = await fetch(`/api/users/me/resumes/${updatedMetadata.resume_id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({
-            name: updatedMetadata.name,
-            description: updatedMetadata.description,
-          }),
-        });
 
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || `Failed to update metadata: ${response.statusText}`);
-        }
-
-        setResumes((prev) =>
-          prev.map((r) =>
-            r.resume_id === updatedMetadata.resume_id ? { ...r, ...updatedMetadata } : r
-          )
-        );
         setToast({
           open: true,
-          message: "Resume updated successfully!",
+          message: "Resume saved successfully!",
           severity: "success",
         });
+        setError(null);
+      } else {
+        // This should never happen since we don't edit existing resumes
+        console.error('[DEBUG] Attempted to edit an existing resume, which is not supported');
       }
-      fetchResumes();
     } catch (error) {
       console.error('[DEBUG] Error saving metadata:', error);
+      setError(error.message);
       setToast({
         open: true,
-        message: error.message || "Failed to save resume. Please try again.",
+        message: error.message || "Failed to save resume",
         severity: "error",
       });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -304,7 +378,7 @@ function Home({
 
   const validateName = (name, currentResumeId = null) => {
     if (!name) {
-      setNameError("Name is required");
+      setError("Name is required");
       return false;
     }
     
@@ -313,11 +387,11 @@ function Home({
     );
     
     if (duplicate) {
-      setNameError("A resume with this name already exists");
+      setError("A resume with this name already exists");
       return false;
     }
     
-    setNameError("");
+    setError("");
     return true;
   };
 
@@ -335,7 +409,7 @@ function Home({
         currentTheme={currentTheme}
         toggleTheme={toggleTheme}
       />
-
+      
       {isLoggedIn && (
         <Box
           sx={{
@@ -344,26 +418,23 @@ function Home({
             display: "flex",
             position: "relative",
             overflow: "hidden",
+            px: 3,
+            pb: 3
           }}
         >
-          {/* Left Panel - Resumes List and Metadata */}
+          {/* Left Panel - Resumes List */}
           <Box
             sx={{
               position: 'absolute',
-              left: isResumesExpanded ? 0 : -280,
+              left: uiState.isResumesExpanded ? 0 : -320,
               top: 0,
               bottom: 0,
-              width: 280,
-              bgcolor: 'background.paper',
+              width: 320,
               transition: 'left 0.3s ease',
               zIndex: 1,
               display: 'flex',
               flexDirection: 'column',
               overflow: 'hidden',
-              borderRadius: 2,
-              mt: 2,
-              mb: 2,
-              ml: 2,
             }}
           >
             <Paper
@@ -372,13 +443,13 @@ function Home({
                 display: 'flex',
                 flexDirection: 'column',
                 height: '100%',
-                borderRadius: 'inherit',
+                borderRadius: 2,
                 overflow: 'hidden',
               }}
             >
               <Box
                 sx={{
-                  p: 2,
+                  p: 2.5,
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "center",
@@ -386,130 +457,69 @@ function Home({
                   borderColor: 'divider',
                 }}
               >
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Typography variant="h6" component="h1" noWrap>
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
                     My Resumes
                   </Typography>
                   <Typography 
-                    variant="body2" 
-                    color="text.secondary"
+                    variant="caption" 
                     sx={{ 
-                      ml: 1,
-                      bgcolor: 'action.selected',
+                      ml: 1.5,
+                      bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
                       px: 1,
                       py: 0.5,
                       borderRadius: 1,
-                      fontSize: '0.75rem'
+                      fontWeight: 500
                     }}
                   >
-                    {resumes.length} of 5
+                    {resumes.length}/5
                   </Typography>
                 </Box>
-                <Button
-                  variant="contained"
-                  component="label"
-                  color="primary"
-                  size="small"
-                  sx={{ textTransform: "none", minWidth: 0 }}
-                  disabled={resumes.length >= 5}
-                >
-                  Upload
-                  <input
-                    type="file"
-                    hidden
-                    accept=".pdf"
-                    onChange={handleAddNewResume}
-                  />
-                </Button>
+                {resumes.length < 5 && (
+                  <Button
+                    variant="contained"
+                    startIcon={<UploadFileIcon />}
+                    component="label"
+                    size="small"
+                    sx={{
+                      borderRadius: 1.5,
+                      textTransform: 'none'
+                    }}
+                  >
+                    Upload
+                    <input
+                      type="file"
+                      hidden
+                      accept="application/pdf"
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files.length > 0) {
+                          handleAddNewResume(e.target.files[0]);
+                        }
+                      }}
+                    />
+                  </Button>
+                )}
               </Box>
 
               <Box sx={{ flexGrow: 1, overflow: 'auto', p: 2 }}>
-                {isLoading ? (
+                {uiState.isLoading ? (
                   <LoadingState />
-                ) : resumes.length === 0 ? (
-                  <EmptyState
-                    message="No resumes uploaded yet"
-                    action="Upload Resume"
-                    onAction={() => document.querySelector('input[type="file"]').click()}
-                  />
                 ) : (
                   <TransitionComponent>
+                    {console.log('[DEBUG] Rendering ResumeList with selectedResume:', selectedResume)}
+                    
                     <ResumeList
                       resumes={resumes}
+                      selectedResume={selectedResume}
                       onSelect={handleResumeSelect}
-                      onEdit={handleEditResume}
-                      onDelete={handleDeleteResume}
-                      selectedId={selectedResumeId}
+                      onDelete={handleDelete}
+                      onSave={handleSaveMetadata}
+                      onCancel={handleCancel}
+                      error={uiState.error}
+                      setError={setError}
                     />
                   </TransitionComponent>
-                )}
-
-                {(newResume || editingResume) && (
-                  <Box sx={{ mt: 2 }}>
-                    <Paper elevation={2} sx={{ p: 2 }}>
-                      <Typography variant="h6" sx={{ mb: 2 }}>
-                        {newResume ? 'New Resume' : 'Edit Resume'}
-                      </Typography>
-                      <Stack spacing={2}>
-                        <TextField
-                          fullWidth
-                          label="Name"
-                          value={newResume?.name || editingResume?.name || ''}
-                          onChange={(e) => {
-                            const newName = e.target.value;
-                            if (newResume) {
-                              setNewResume(prev => ({ ...prev, name: newName }));
-                            } else {
-                              setEditingResume(prev => ({ ...prev, name: newName }));
-                            }
-                            validateName(newName, editingResume?.resume_id);
-                          }}
-                          required
-                          error={!!nameError}
-                          helperText={nameError}
-                        />
-                        <TextField
-                          fullWidth
-                          label="Description"
-                          value={newResume?.description || editingResume?.description || ''}
-                          onChange={(e) => {
-                            if (newResume) {
-                              setNewResume(prev => ({ ...prev, description: e.target.value }));
-                            } else {
-                              setEditingResume(prev => ({ ...prev, description: e.target.value }));
-                            }
-                          }}
-                          multiline
-                          rows={3}
-                        />
-                        <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
-                          <Button
-                            variant="outlined"
-                            onClick={() => {
-                              setNewResume(null);
-                              setEditingResume(null);
-                              setSelectedFile(null);
-                              setNameError("");
-                            }}
-                          >
-                            Cancel
-                          </Button>
-                          <Button
-                            variant="contained"
-                            onClick={() => {
-                              const metadata = newResume || editingResume;
-                              if (validateName(metadata.name, editingResume?.resume_id)) {
-                                handleSaveMetadata(metadata);
-                              }
-                            }}
-                            disabled={!!nameError}
-                          >
-                            {newResume ? 'Upload' : 'Save'}
-                          </Button>
-                        </Box>
-                      </Stack>
-                    </Paper>
-                  </Box>
+                  
                 )}
               </Box>
             </Paper>
@@ -518,96 +528,90 @@ function Home({
           {/* Toggle Button */}
           <IconButton
             size="small"
-            onClick={() => setIsResumesExpanded(!isResumesExpanded)}
+            onClick={toggleResumesPanel}
             sx={{
               position: 'absolute',
-              left: isResumesExpanded ? 280 : 0,
+              left: uiState.isResumesExpanded ? 320 : 0,
               top: '50%',
               transform: 'translateY(-50%)',
               zIndex: 1,
-              bgcolor: 'transparent',
-              border: 0,
-              borderLeft: isResumesExpanded ? 1 : 0,
-              borderRight: isResumesExpanded ? 0 : 1,
+              bgcolor: theme.palette.background.paper,
+              border: 1,
               borderColor: 'divider',
-              borderRadius: isResumesExpanded ? '0 4px 4px 0' : '4px',
-              transition: 'left 0.3s ease, background-color 0.2s ease',
-              opacity: 0.6,
-              width: 20,
+              borderRadius: '0 8px 8px 0',
+              transition: 'left 0.3s ease',
+              width: 24,
               height: 48,
               '&:hover': {
-                bgcolor: theme.palette.mode === 'dark' 
-                  ? 'rgba(255, 255, 255, 0.1)' 
-                  : 'rgba(0, 0, 0, 0.05)',
-                opacity: 1,
+                bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
               },
             }}
           >
-            {isResumesExpanded 
-              ? <ArrowBackIcon sx={{ fontSize: 16 }} />
-              : <ArrowForwardIcon sx={{ fontSize: 16 }} />}
+            {uiState.isResumesExpanded 
+              ? <KeyboardArrowLeftIcon sx={{ fontSize: 20 }} />
+              : <KeyboardArrowRightIcon sx={{ fontSize: 20 }} />}
           </IconButton>
 
-          {/* Main Content */}
+          {/* Main Content - PDF Preview */}
           <Box
             sx={{
               flexGrow: 1,
-              ml: isResumesExpanded ? 'calc(280px + 16px)' : 0,
+              ml: uiState.isResumesExpanded ? '336px' : '16px',
               transition: 'margin-left 0.3s ease',
-              display: 'flex',
-              gap: 2,
-              p: 2,
             }}
           >
-            {/* PDF Preview */}
-            <Box
+            <Paper
+              elevation={3}
               sx={{
-                flexGrow: 1,
+                height: '100%',
+                borderRadius: 2,
+                overflow: 'hidden',
+                bgcolor: 'background.paper',
                 display: 'flex',
-                flexDirection: 'column',
-                gap: 2,
+                alignItems: 'center',
+                justifyContent: 'center'
               }}
             >
-              <Paper
-                elevation={3}
-                sx={{
-                  flexGrow: 1,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  bgcolor: 'background.paper',
-                  borderRadius: 2,
-                  overflow: 'hidden',
-                  minWidth: 0,
-                  '& > div': {
-                    borderRadius: 'inherit',
-                    overflow: 'hidden',
-                  },
-                }}
-              >
-                {selectedFile ? (
-                  <PDFPreview
-                    file={selectedFile}
-                    resumeId={selectedResumeId}
-                    onSaveSuccess={handleSaveSuccess}
-                  />
-                ) : (
-                  <Box
-                    sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      height: '100%',
-                      p: 3,
+              {selectedResume.file ? (
+                <PDFPreview
+                  file={selectedResume.file}
+                  resumeId={selectedResume.id}
+                  onSaveSuccess={handleSaveSuccess}
+                />
+              ) : (
+                <Box 
+                  sx={{ 
+                    display: 'flex', 
+                    flexDirection: 'column',
+                    alignItems: 'center', 
+                    justifyContent: 'center',
+                    p: 4,
+                    textAlign: 'center'
+                  }}
+                >
+                  <DescriptionOutlinedIcon sx={{ fontSize: 80, opacity: 0.2, mb: 3 }} />
+                  <Typography 
+                    variant="h5" 
+                    color="text.primary" 
+                    sx={{ 
+                      mb: 1,
+                      fontWeight: 500
                     }}
                   >
-                    <EmptyState
-                      message="Select a resume to preview and edit"
-                      action={null}
-                    />
-                  </Box>
-                )}
-              </Paper>
-            </Box>
+                    No resume selected
+                  </Typography>
+                  <Typography 
+                    variant="body1" 
+                    color="text.secondary" 
+                    sx={{ 
+                      maxWidth: 400
+                    }}
+                  >
+                    Select a resume from the list or upload a new one to view and analyze it
+                  </Typography>
+                </Box>
+              )}
+            </Paper>
           </Box>
         </Box>
       )}
