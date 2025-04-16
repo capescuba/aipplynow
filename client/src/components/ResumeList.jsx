@@ -15,6 +15,7 @@ import {
   DialogContent,
   DialogActions,
   CircularProgress,
+  Divider,
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import SaveIcon from '@mui/icons-material/Save';
@@ -127,149 +128,355 @@ const ResumeList = ({
   };
 
   return (
-    <Box sx={{ width: '100%', maxWidth: 600, mx: 'auto' }}>
-      <div style={{ display: 'none' }}>
-        {console.log('[DEBUG] ResumeList - resumes:', resumes)}
-        {console.log('[DEBUG] ResumeList - first resume:', resumes[0])}
-        {console.log('[DEBUG] ResumeList - selectedResume:', selectedResume)}
-      </div>
-      <h2>Your Resumes</h2>
-      {error && <div className="error">{error}</div>}
-      
-      <List>
-        {resumes.length === 0 ? (
-          <Typography variant="body1" color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
-            No resumes found. Upload a new resume to get started.
-          </Typography>
-        ) : (
-          resumes.map((resume) => (
-            <Card
-              key={resume.resume_id || 'new'}
-              onClick={() => {
-                console.log('[DEBUG] ResumeList - onClick - resume:', resume);
-                console.log('[DEBUG] ResumeList - onClick - onSelect type:', typeof onSelect);
-                if (typeof onSelect === 'function') {
-                  onSelect(resume);
-                } else {
-                  console.error('[DEBUG] ResumeList - onSelect is not a function:', onSelect);
-                }
-              }}
-              sx={{
-                mb: 2,
-                cursor: 'pointer',
-                bgcolor: String(selectedResume?.id) === String(resume.resume_id) ? 'action.selected' : 'background.paper',
-                '&:hover': {
-                  bgcolor: 'action.hover',
-                },
-              }}
-            >
-              <Box sx={{ p: 2, display: 'flex', alignItems: 'center' }}>
-                <DescriptionIcon sx={{ mr: 2, color: 'primary.main' }} />
-                <Box sx={{ flexGrow: 1 }}>
-                  <Typography variant="subtitle1">
-                    {resume.name}
-                  </Typography>
-                  {resume.description && (
-                    <Typography variant="body2" color="text.secondary">
-                      {resume.description}
-                    </Typography>
-                  )}
-                </Box>
-                <IconButton
-                  onClick={(e) => handleDeleteClick(e, resume)}
-                  size="small"
-                  color="error"
-                  disabled={isDeleting}
-                >
-                  <DeleteIcon />
-                </IconButton>
-              </Box>
-            </Card>
-          ))
-        )}
-      </List>
-      
-      {/* Show metadata panel for selected resume or new upload */}
-      {selectedResume && (selectedResume.file || selectedResume.id) && (
-        <Box sx={{ width: '100%', p: 1, mb: 2, border: '1px solid #ccc', borderRadius: '4px', bgcolor: 'background.paper' }}>
-          <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 'bold' }}>
-            {selectedResume.id === null ? 'New Resume' : 'Resume Details'}
-          </Typography>
-          {error && (
-            <Typography color="error" sx={{ mb: 1 }}>
-              {error}
-            </Typography>
-          )}
-          <TextField
-            fullWidth
-            label="Name *"
-            value={editName}
-            onChange={handleNameChange}
-            margin="normal"
-            size="small"
-            error={!!error}
-            helperText={error}
-            disabled={selectedResume.id !== null}  // Disable if not a new resume
-            required
-          />
-          <TextField
-            fullWidth
-            label="Description"
-            value={editDescription}
-            onChange={(e) => setEditDescription(e.target.value)}
-            margin="normal"
-            size="small"
-            multiline
-            rows={2}
-            disabled={selectedResume.id !== null}  // Disable if not a new resume
-          />
-          {selectedResume.id === null && (  // Only show buttons for new resumes
-            <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
-              <Button
-                variant="contained"
-                size="small"
-                startIcon={<SaveIcon />}
-                onClick={handleSaveClick}
-                disabled={!!error}
-              >
-                Save
-              </Button>
-              <Button
-                variant="outlined"
-                size="small"
-                startIcon={<CancelIcon />}
-                onClick={onCancel}
-              >
-                Cancel
-              </Button>
-            </Box>
-          )}
-        </Box>
-      )}
+    <Box sx={{ 
+      width: '100%',
+      height: '100vh',
+      maxHeight: '100%',
+      display: 'flex',
+      flexDirection: 'column',
+      p: 3,
+      backgroundColor: '#fff',
+      minWidth: '900px',
+    }}>
+      {/* Header */}
+      <Box sx={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        mb: 3,
+      }}>
+        <Typography variant="h5" sx={{ 
+          fontWeight: 600,
+          color: 'text.primary',
+        }}>
+          Documents
+        </Typography>
+        <Typography 
+          variant="body2" 
+          sx={{ 
+            px: 2, 
+            py: 0.5, 
+            borderRadius: 2,
+            backgroundColor: 'primary.main',
+            color: 'primary.contrastText',
+            fontWeight: 500,
+          }}
+        >
+          {resumes.length}/5 uploaded
+        </Typography>
+      </Box>
 
-      {/* Delete Confirmation Dialog */}
+      {/* Main Content */}
+      <Box sx={{ 
+        display: 'grid',
+        gridTemplateColumns: 'minmax(500px, 1fr) 400px',
+        gap: 4,
+        flex: 1,
+        overflow: 'hidden',
+        height: 'calc(100% - 60px)',
+        backgroundColor: '#fff',
+        minWidth: 0,
+      }}>
+        {/* Left side - Document List */}
+        <Box sx={{ 
+          overflow: 'auto',
+          height: '100%',
+          pr: 2,
+          minWidth: 0,
+          '&::-webkit-scrollbar': {
+            width: '8px',
+          },
+          '&::-webkit-scrollbar-track': {
+            backgroundColor: 'rgba(0,0,0,0.05)',
+            borderRadius: '4px',
+          },
+          '&::-webkit-scrollbar-thumb': {
+            backgroundColor: 'rgba(0,0,0,0.2)',
+            borderRadius: '4px',
+            '&:hover': {
+              backgroundColor: 'rgba(0,0,0,0.3)',
+            },
+          },
+        }}>
+          <List sx={{ 
+            p: 0,
+            width: '100%',
+          }}>
+            {resumes.length === 0 ? (
+              <Paper sx={{ 
+                p: 4,
+                textAlign: 'center',
+                backgroundColor: '#f8f9fa',
+                border: '2px dashed',
+                borderColor: 'grey.300',
+                borderRadius: 2,
+                width: '100%',
+              }}>
+                <DescriptionIcon sx={{ fontSize: 48, color: 'grey.500', mb: 2 }} />
+                <Typography variant="body1" sx={{ color: 'text.primary', mb: 1, fontWeight: 500 }}>
+                  No documents uploaded yet
+                </Typography>
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                  Upload a PDF to get started
+                </Typography>
+              </Paper>
+            ) : (
+              resumes.map((resume) => (
+                <Card
+                  key={resume.resume_id || 'new'}
+                  onClick={() => {
+                    console.log('[DEBUG] ResumeList - onClick - resume:', resume);
+                    if (typeof onSelect === 'function') {
+                      onSelect(resume);
+                    }
+                  }}
+                  sx={{
+                    mb: 2,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    backgroundColor: String(selectedResume?.id) === String(resume.resume_id)
+                      ? 'primary.softBg'
+                      : '#fff',
+                    border: '1px solid',
+                    borderColor: String(selectedResume?.id) === String(resume.resume_id)
+                      ? 'primary.main'
+                      : 'grey.200',
+                    boxShadow: String(selectedResume?.id) === String(resume.resume_id)
+                      ? '0 4px 12px rgba(25, 118, 210, 0.12)'
+                      : '0 1px 3px rgba(0,0,0,0.1)',
+                    '&:hover': {
+                      borderColor: 'primary.main',
+                      backgroundColor: String(selectedResume?.id) === String(resume.resume_id)
+                        ? 'primary.softBg'
+                        : 'grey.50',
+                      transform: 'translateY(-1px)',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+                    },
+                    width: '100%',
+                  }}
+                >
+                  <Box sx={{ 
+                    p: 2.5,
+                    display: 'flex', 
+                    alignItems: 'flex-start',
+                    gap: 2,
+                  }}>
+                    <DescriptionIcon sx={{ 
+                      color: String(selectedResume?.id) === String(resume.resume_id)
+                        ? 'primary.main'
+                        : 'grey.700',
+                      fontSize: 28,
+                    }} />
+                    <Box sx={{ flexGrow: 1 }}>
+                      <Typography 
+                        variant="subtitle1" 
+                        sx={{ 
+                          fontWeight: 500, 
+                          mb: 0.5,
+                          color: String(selectedResume?.id) === String(resume.resume_id)
+                            ? 'primary.main'
+                            : 'text.primary',
+                        }}
+                      >
+                        {resume.name}
+                      </Typography>
+                      {resume.description && (
+                        <Typography 
+                          variant="body2" 
+                          sx={{ 
+                            color: 'text.secondary',
+                            display: '-webkit-box',
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: 'vertical',
+                            overflow: 'hidden',
+                            lineHeight: 1.5,
+                          }}
+                        >
+                          {resume.description}
+                        </Typography>
+                      )}
+                    </Box>
+                    <IconButton
+                      onClick={(e) => handleDeleteClick(e, resume)}
+                      size="small"
+            sx={{
+                        color: 'error.main',
+                        opacity: 0.7,
+                        backgroundColor: 'error.lighter',
+                        '&:hover': {
+                          opacity: 1,
+                          backgroundColor: 'error.light',
+                        }
+                      }}
+                      disabled={isDeleting}
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Box>
+                </Card>
+              ))
+            )}
+          </List>
+        </Box>
+
+        {/* Right side - Details Panel */}
+        {selectedResume && (selectedResume.file || selectedResume.id) && (
+          <Box sx={{ 
+            overflow: 'auto',
+            height: '100%',
+            pr: 2,
+            width: '100%',
+            minWidth: 0,
+            '&::-webkit-scrollbar': {
+              width: '8px',
+            },
+            '&::-webkit-scrollbar-track': {
+              backgroundColor: 'rgba(0,0,0,0.05)',
+              borderRadius: '4px',
+            },
+            '&::-webkit-scrollbar-thumb': {
+              backgroundColor: 'rgba(0,0,0,0.2)',
+              borderRadius: '4px',
+              '&:hover': {
+                backgroundColor: 'rgba(0,0,0,0.3)',
+              },
+            },
+          }}>
+            <Paper sx={{ 
+              p: 3,
+              backgroundColor: '#fff',
+              border: '1px solid',
+              borderColor: 'grey.200',
+              borderRadius: 2,
+              boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+            }}>
+              <Typography variant="h6" sx={{ 
+                mb: 3, 
+                fontWeight: 600,
+                color: 'text.primary',
+              }}>
+                {selectedResume.id === null ? 'New Document' : 'Details'}
+              </Typography>
+              
+              {error && (
+                <Typography 
+                  color="error" 
+                  sx={{ 
+                    mb: 3,
+                    p: 1.5,
+                    backgroundColor: 'error.lighter',
+                    borderRadius: 1,
+                    fontSize: '0.875rem',
+                  }}
+                >
+                    {error}
+                  </Typography>
+                )}
+
+                <TextField
+                  fullWidth
+                  label="Name"
+                  value={editName}
+                  onChange={handleNameChange}
+                  size="small"
+                  error={!!error}
+                disabled={selectedResume.id !== null}
+                required
+                sx={{ mb: 2.5 }}
+                />
+
+                <TextField
+                  fullWidth
+                  label="Description"
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  size="small"
+                  multiline
+                rows={3}
+                disabled={selectedResume.id !== null}
+                sx={{ mb: 2.5 }}
+                placeholder="Add a description (optional)"
+              />
+
+              <TextField
+                fullWidth
+                label="Upload Date"
+                value={selectedResume.date_uploaded || (selectedResume.id === null ? new Date().toISOString().split('T')[0] : '')}
+                size="small"
+                disabled={true}
+                InputProps={{
+                  readOnly: true,
+                }}
+                sx={{ mb: 2.5 }}
+              />
+
+              {selectedResume.id === null && (
+                <Box sx={{ 
+                  display: 'flex', 
+                  gap: 2, 
+                  mt: 4,
+                  pt: 3,
+                  borderTop: '1px solid',
+                  borderColor: 'grey.200',
+                }}>
+                  <Button
+                    variant="contained"
+                    size="large"
+                    startIcon={<SaveIcon />}
+                    onClick={handleSaveClick}
+                    disabled={!!error}
+                    sx={{ flex: 1 }}
+                  >
+                    Save
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    size="large"
+                    startIcon={<CancelIcon />}
+                    onClick={onCancel}
+                    sx={{ flex: 1 }}
+                  >
+                    Cancel
+                  </Button>
+                </Box>
+              )}
+            </Paper>
+          </Box>
+        )}
+              </Box>
+
+      {/* Delete Dialog */}
       <Dialog
         open={deleteDialogOpen}
         onClose={handleCancelDelete}
-        aria-labelledby="delete-dialog-title"
-        aria-describedby="delete-dialog-description"
+        PaperProps={{
+          sx: { borderRadius: 2 }
+        }}
       >
-        <DialogTitle id="delete-dialog-title">
-          Confirm Delete
+        <DialogTitle sx={{ pb: 1 }}>
+          Delete Document
         </DialogTitle>
-        <DialogContent id="delete-dialog-description">
-          <Typography>
-            Are you sure you want to delete "{resumeToDelete?.name}"? This action cannot be undone.
+        <DialogContent>
+          <Typography variant="body1">
+            Are you sure you want to delete "{resumeToDelete?.name}"?
           </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            This action cannot be undone.
+                  </Typography>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCancelDelete} color="primary" disabled={isDeleting}>
+        <DialogActions sx={{ px: 3, pb: 3 }}>
+          <Button 
+            onClick={handleCancelDelete} 
+            color="inherit"
+            disabled={isDeleting}
+            sx={{ mr: 1 }}
+          >
             Cancel
           </Button>
           <Button 
             onClick={handleConfirmDelete} 
+            variant="contained"
             color="error" 
-            autoFocus
             disabled={isDeleting}
             startIcon={isDeleting ? <CircularProgress size={20} color="inherit" /> : <DeleteIcon />}
           >
@@ -277,7 +484,7 @@ const ResumeList = ({
           </Button>
         </DialogActions>
       </Dialog>
-    </Box>
+                </Box>
   );
 };
 

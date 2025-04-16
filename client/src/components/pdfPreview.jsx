@@ -277,6 +277,7 @@ function PDFPreview({ file: initialFile, resumeId, onSaveSuccess }) {
             jobDesc={jobDesc}
             setJobDesc={setJobDesc}
             url={url}
+            setUrl={setUrl}
             onAnalyze={handleAnalyze}
             loading={loading}
             uploadStatus={uploadStatus}
