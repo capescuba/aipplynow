@@ -28,6 +28,7 @@ function ResumeParser({
   url,
   jobDesc,
   setJobDesc,
+  setUrl,
   loading,
   currentResumeId,
   uploadStatus,
@@ -36,6 +37,29 @@ function ResumeParser({
 }) {
   const theme = useTheme();
   
+  // Add event listener for job description
+  React.useEffect(() => {
+    const handleJobDescriptionEvent = (event) => {
+      console.log('Received job description event:', event.detail);
+      if (event.detail && event.detail.text) {
+        setJobDesc(event.detail.text);
+        if (event.detail.url) {
+          setUrl(event.detail.url);
+        }
+      }
+    };
+
+    // Listen for the custom event
+    document.addEventListener('AIpplyNowJobDescription', handleJobDescriptionEvent);
+    window.addEventListener('AIpplyNowJobDescription', handleJobDescriptionEvent);
+
+    // Clean up
+    return () => {
+      document.removeEventListener('AIpplyNowJobDescription', handleJobDescriptionEvent);
+      window.removeEventListener('AIpplyNowJobDescription', handleJobDescriptionEvent);
+    };
+  }, [setJobDesc, setUrl]);
+
   // Transform and validate score data
   const processedScoreData = React.useMemo(() => {
     if (!scoreData) return null;
