@@ -1,12 +1,15 @@
 // content.js
-let isSelectionMode = false;
-let highlightedElement = null;
-let originalStyles = null;
+// Use window object to store state to avoid redeclaration
+if (typeof window.isSelectionMode === 'undefined') {
+  window.isSelectionMode = false;
+  window.highlightedElement = null;
+  window.originalStyles = null;
+}
 
 function toggleSelectionMode(enable) {
   console.log('Toggling selection mode:', enable);
   if (enable) {
-    isSelectionMode = true;
+    window.isSelectionMode = true;
     document.body.style.cursor = 'pointer';
     document.addEventListener('mouseover', highlightElement);
     document.addEventListener('mouseout', removeHighlight);
@@ -32,7 +35,7 @@ function toggleSelectionMode(enable) {
     indicator.textContent = 'Click on the job description';
     document.body.appendChild(indicator);
   } else {
-    isSelectionMode = false;
+    window.isSelectionMode = false;
     document.body.style.cursor = 'default';
     document.removeEventListener('mouseover', highlightElement);
     document.removeEventListener('mouseout', removeHighlight);
@@ -48,7 +51,7 @@ function toggleSelectionMode(enable) {
 }
 
 function highlightElement(event) {
-  if (!isSelectionMode) return;
+  if (!window.isSelectionMode) return;
   event.preventDefault();
   event.stopPropagation();
   removeHighlight();
@@ -56,8 +59,8 @@ function highlightElement(event) {
   const element = event.target;
   if (element.tagName === 'BODY' || element.tagName === 'HTML') return;
   
-  highlightedElement = element;
-  originalStyles = {
+  window.highlightedElement = element;
+  window.originalStyles = {
     backgroundColor: element.style.backgroundColor,
     boxShadow: element.style.boxShadow,
     transition: element.style.transition,
@@ -71,18 +74,18 @@ function highlightElement(event) {
 }
 
 function removeHighlight() {
-  if (highlightedElement && originalStyles) {
-    highlightedElement.style.backgroundColor = originalStyles.backgroundColor;
-    highlightedElement.style.boxShadow = originalStyles.boxShadow;
-    highlightedElement.style.transition = originalStyles.transition;
-    highlightedElement.style.outline = originalStyles.outline;
-    highlightedElement = null;
-    originalStyles = null;
+  if (window.highlightedElement && window.originalStyles) {
+    window.highlightedElement.style.backgroundColor = window.originalStyles.backgroundColor;
+    window.highlightedElement.style.boxShadow = window.originalStyles.boxShadow;
+    window.highlightedElement.style.transition = window.originalStyles.transition;
+    window.highlightedElement.style.outline = window.originalStyles.outline;
+    window.highlightedElement = null;
+    window.originalStyles = null;
   }
 }
 
 function selectElement(event) {
-  if (!isSelectionMode) return;
+  if (!window.isSelectionMode) return;
   event.preventDefault();
   event.stopPropagation();
   
@@ -99,42 +102,54 @@ function selectElement(event) {
       .then(() => {
         console.log('Job description copied:', textToCopy);
         const sourceUrl = window.location.href;
-        chrome.runtime.sendMessage({
-          action: "jobDescriptionSelected",
-          text: textToCopy,
-          url: sourceUrl
-        }, (response) => {
-          if (chrome.runtime.lastError) {
-            console.error('Error sending to runtime:', chrome.runtime.lastError.message);
-            // Show error feedback
-            element.style.backgroundColor = 'rgba(211, 47, 47, 0.2)';
-          } else {
-            console.log('Runtime response:', response);
+        
+        // Simple direct message to background script
+        try {
+          chrome.runtime.sendMessage({
+            action: "jobDescriptionSelected",
+            text: textToCopy,
+            url: sourceUrl
+          }, (response) => {
+            console.log('Message sent, response:', response);
+            
             // Keep success feedback briefly
             setTimeout(() => {
               element.style.backgroundColor = originalBackground;
               element.style.transition = '';
             }, 500);
-          }
-        });
-        toggleSelectionMode(false);
+            
+            toggleSelectionMode(false);
+          });
+        } catch (error) {
+          console.error('Error sending message:', error);
+          // Show error feedback
+          element.style.backgroundColor = 'rgba(211, 47, 47, 0.2)';
+          toggleSelectionMode(false);
+        }
       })
       .catch(err => {
         console.error('Failed to copy:', err);
         // Show error feedback
         element.style.backgroundColor = 'rgba(211, 47, 47, 0.2)';
+        toggleSelectionMode(false);
       });
   } else {
     console.log('No text found in selected section');
   }
 }
 
-console.log('Content script loaded');
+// Only initialize if not already initialized
+if (!window.contentScriptInitialized) {
+  console.log('Content script loaded');
+  window.contentScriptInitialized = true;
 
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  console.log('Message received in content script:', request);
-  if (request.action === "toggleSelectionMode") {
-    toggleSelectionMode(true);
-    sendResponse({ status: "selectionModeOn" });
-  }
-});
+  // Initialize message listener
+  chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    console.log('Message received in content script:', request);
+    if (request.action === "toggleSelectionMode") {
+      toggleSelectionMode(true);
+      sendResponse({ status: "selectionModeOn" });
+      return true; // Keep the message channel open
+    }
+  });
+}
